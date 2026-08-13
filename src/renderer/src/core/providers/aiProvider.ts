@@ -6,6 +6,18 @@ export interface GenerationAbortSignal {
   aborted: boolean
 }
 
+/** Capability description so clients can reason about a provider. */
+export interface ProviderCapabilities {
+  mode: 'local' | 'cloud'
+  gpuRequired: boolean
+  maxReferences: number
+  outputFormat: ModelFormat
+  supportsCancel: boolean
+  supportsTimeout: boolean
+  /** Backend provider id to request when the job runs server-side. */
+  backendId: string
+}
+
 /**
  * Result of an AI image-to-3D generation run.
  */
@@ -43,6 +55,7 @@ export interface AIImage3DProvider {
   readonly id: string
   readonly name: string
   readonly description: string
+  readonly capabilities: ProviderCapabilities
   /** True when the provider requires the FastAPI backend to be reachable. */
   readonly requiresBackend: boolean
   generate(

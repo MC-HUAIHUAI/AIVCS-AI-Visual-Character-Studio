@@ -143,7 +143,7 @@ async function runFlow(jobId: string, provider: AIImage3DProvider, context: RunC
   const read = (): GenerationJob => useGenerationStore.getState().jobs[jobId]
 
   if (provider.requiresBackend) {
-    await backendFlow(context, progress, finish, read)
+    await backendFlow(context, provider.capabilities.backendId, progress, finish, read)
   } else {
     await localFlow(provider, context, progress, finish)
   }
@@ -151,12 +151,14 @@ async function runFlow(jobId: string, provider: AIImage3DProvider, context: RunC
 
 async function backendFlow(
   context: RunContext,
+  backendProviderId: string,
   progress: (patch: Partial<GenerationJob>) => void,
   finish: (patch: Partial<GenerationJob>) => void,
   read: () => GenerationJob
 ): Promise<void> {
   try {
     const created = await createGenerationJob({
+      backendProviderId,
       spec: context.request.spec,
       references: context.request.references,
       timeoutSeconds: context.request.timeoutSeconds

@@ -21,6 +21,7 @@ export async function backendHealth(): Promise<boolean> {
 }
 
 export interface CreateGenerationRequest {
+  backendProviderId?: string
   spec: CharacterSpec
   references: GenerationRequest['references']
   timeoutSeconds?: number
@@ -31,7 +32,7 @@ export async function createGenerationJob(req: CreateGenerationRequest): Promise
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      provider: 'mock',
+      provider: req.backendProviderId ?? 'mock',
       spec: req.spec,
       references: req.references,
       timeoutSeconds: req.timeoutSeconds ?? DEFAULT_GENERATION_TIMEOUT_SECONDS
@@ -81,6 +82,15 @@ export class BackendImage3DProvider implements AIImage3DProvider {
   readonly description =
     '通过本地 FastAPI 后端运行生成任务（状态机 / 取消 / 超时 / 持久化模型）。需要运行 `npm run backend`。'
   readonly requiresBackend = true
+  readonly capabilities = {
+    mode: 'cloud' as const,
+    gpuRequired: false,
+    maxReferences: 4,
+    outputFormat: 'glb' as const,
+    supportsCancel: true,
+    supportsTimeout: true,
+    backendId: 'mock'
+  }
 
   async generate(
     spec: CharacterSpec,
@@ -89,6 +99,7 @@ export class BackendImage3DProvider implements AIImage3DProvider {
     signal?: GenerationAbortSignal
   ): Promise<GeneratedModelResult> {
     const created = await createGenerationJob({
+      backendProviderId: this.capabilities.backendId,
       spec,
       references: references.map((r) => ({ imageId: r.imageId, dataUrl: r.dataUrl, view: r.view ?? null })),
       timeoutSeconds: DEFAULT_GENERATION_TIMEOUT_SECONDS
@@ -126,6 +137,71 @@ export class BackendImage3DProvider implements AIImage3DProvider {
     }
     if (dto?.status === 'cancelled' || signal?.aborted) {
       throw new Error('generation aborted')
+    }
+    throw new Error(safeErrorMessage(new Error(dto?.error ?? '生成失败')))
+  }
+}
+
+/**
+ * Frontend handle for the backend LocalLowPower3DProvider (CPU, deterministic).
+ * The generationStore drives the job lifecycle through capabilities.backendId.
+ */
+export class LocalLowPower3DProvider implements AIImage3DProvider {
+  readonly id = 'backend-local-lowpower'
+  readonly name = '本地低功耗 3D（CPU）'
+  readonly description =
+    '本地 CPU 低功耗确定性原型：由角色设定 + 参考图配色生成低模 GLB。需要运行 `npm run backend`。'
+  readonly requiresBackend = true
+  readonly capabilities = {
+    mode: 'local' as const,
+    gpuRequired: false,
+    maxReferences: 4,
+    outputFormat: 'glb' as const,
+    supportsCancel: true,
+    supportsTimeout: true,
+    backendId: 'local-lowpower'
+  }
+
+  async generate(
+    spec: CharacterSpec,
+    references: VisionImageInput[],
+    onProgress: (p: GenerationProgress) => void,
+    signal?: GenerationAbortSignal
+  ): Promise<GeneratedModelResult> {
+    const created = await createGenerationJob({
+      backendProviderId: this.capabilities.backendId,
+      spec,
+      references: references.map((r) => ({ imageId: r.imageId, dataUrl: r.dataUrl, view: r.view ?? null })),
+      timeoutSeconds: DEFAULT_GENERATION_TIMEOUT_SECONDS
+    })
+    let dto: JobDto | null = null
+    for (;;) {
+      dto = await pollGenerationJob(created.jobId)
+      onProgress({
+        step: dto.steps.filter((s) => s.status === 'done' || s.status === 'running').length,
+        totalSteps: dto.steps.length,
+        percent: dto.progress,
+        message: dto.message
+      })
+      if (isTerminal(dto.status)) break
+      if (signal?.aborted) {
+        await cancelGenerationJob(created.jobId)
+        throw new Error('generation aborted')
+      }
+      await sleep(450)
+    }
+    if (dto && dto.status === 'done' && dto.result?.model_id) {
+      const { bytes, mime, sizeBytes } = await downloadModel(dto.result.model_id)
+      return {
+        modelId: dto.result.model_id,
+        name: 'generated_character',
+        format: (dto.result.format ?? 'glb') as ModelFormat,
+        sizeBytes: dto.result.size_bytes ?? sizeBytes,
+        providerId: dto.result.provider_id,
+        sourceJobId: dto.result.source_job_id,
+        mime: dto.result.mime ?? mime,
+        bytes
+      }
     }
     throw new Error(safeErrorMessage(new Error(dto?.error ?? '生成失败')))
   }

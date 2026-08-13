@@ -1,11 +1,13 @@
 from .base import AIImage3DProvider
 from .mock import MockImage3DProvider
 from .real_placeholder import RealImage3DProviderPlaceholder
+from .local_lowpower import LocalLowPower3DProvider
 
 REGISTRY: dict[str, AIImage3DProvider] = {
     p.id: p
     for p in (
         MockImage3DProvider(),
+        LocalLowPower3DProvider(),
         RealImage3DProviderPlaceholder(),
     )
 }

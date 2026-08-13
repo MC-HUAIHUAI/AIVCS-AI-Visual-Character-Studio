@@ -42,6 +42,13 @@ class AIImage3DProvider(ABC):
     name: str = "Base"
     description: str = ""
 
+    # Capability description (used by clients to reason about the provider).
+    gpu_required: bool = False
+    max_references: int = 0
+    output_format: str = "glb"
+    supports_cancel: bool = True
+    supports_timeout: bool = True
+
     @abstractmethod
     async def generate(
         self,

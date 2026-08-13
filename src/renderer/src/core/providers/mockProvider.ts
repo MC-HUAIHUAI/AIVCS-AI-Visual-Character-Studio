@@ -59,6 +59,15 @@ export class MockImage3DProvider implements AIImage3DProvider {
   readonly description =
     '本地模拟 image-to-3D 流程并按角色类型返回演示模型（人类 / 兽人狐），无需任何 AI API。'
   readonly requiresBackend = false
+  readonly capabilities = {
+    mode: 'local' as const,
+    gpuRequired: false,
+    maxReferences: 0,
+    outputFormat: 'glb' as const,
+    supportsCancel: true,
+    supportsTimeout: false,
+    backendId: 'mock'
+  }
 
   async generate(
     spec: CharacterSpec,
