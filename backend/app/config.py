@@ -33,6 +33,11 @@ DEFAULT_PROVIDER = os.environ.get("AIVCS_DEFAULT_PROVIDER", "mock")
 # Simulated duration of a Mock image-to-3D generation (seconds).
 MOCK3D_DURATION_SECONDS = float(os.environ.get("AIVCS_MOCK3D_DURATION_SECONDS", "5"))
 
+# Persistent model output store.
+MODEL_DIR = Path(os.environ.get("AIVCS_MODEL_DIR", ROOT / "backend" / "data" / "models"))
+# Models older than this are deleted by cleanup (hours).
+MODEL_TTL_HOURS = float(os.environ.get("AIVCS_MODEL_TTL_HOURS", "24"))
+
 # CORS origins allowed to talk to this backend (the Electron renderer).
 CORS_ORIGINS = [origin.strip() for origin in os.environ.get("AIVCS_CORS_ORIGINS", "*").split(",")]
 

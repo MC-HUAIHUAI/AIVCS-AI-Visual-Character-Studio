@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
+import tempfile
 import time
 import unittest
 
@@ -20,6 +21,7 @@ from backend.app import config  # noqa: E402
 from backend.app.providers.base import ProviderCancelledError, ProviderError  # noqa: E402
 from backend.app.providers.mock import MockImage3DProvider  # noqa: E402
 from backend.app.schemas.character import CharacterSpec  # noqa: E402
+from backend.app.services.model_store import ModelStore  # noqa: E402
 
 
 async def wait_terminal(job_id: str, timeout: float = 8.0):
@@ -73,6 +75,16 @@ def make_spec(character_type="human", user_notes=""):
 
 
 class JobStateMachineTest(unittest.TestCase):
+    def setUp(self):
+        # Isolate the job store to a temp dir so tests never touch the real
+        # backend/data/models directory.
+        self._tmp = tempfile.mkdtemp()
+        self._orig_store = jobs._store
+        jobs._store = ModelStore(self._tmp)
+
+    def tearDown(self):
+        jobs._store = self._orig_store
+
     def test_queued_to_done(self):
         async def scenario():
             job = jobs.create_job("mock", ok_runner)

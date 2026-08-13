@@ -21,12 +21,20 @@ from typing import Awaitable, Callable
 
 from .providers.base import CancellationToken, ProgressCallback, ProviderCancelledError, ProviderError
 from .schemas.character import JobResult, JobStep, JobStatusResponse
+from .services.model_store import ModelRecord, ModelStore
 
 Runner = Callable[[ProgressCallback, CancellationToken], Awaitable[bytes]]
 
 
 class JobRecord:
-    def __init__(self, job_id: str, provider_name: str, deadline_at: float | None = None, attempt: int = 1):
+    def __init__(
+        self,
+        job_id: str,
+        provider_name: str,
+        deadline_at: float | None = None,
+        attempt: int = 1,
+        spec_hash: str = "",
+    ):
         self.job_id = job_id
         self.provider_name = provider_name
         self.status = "queued"
@@ -43,6 +51,7 @@ class JobRecord:
         self.cancelled_by_user = False
         self.timed_out = False
         self.attempt = attempt
+        self.spec_hash = spec_hash
         self.cancel_token = CancellationToken()
 
     def to_response(self) -> JobStatusResponse:
@@ -64,8 +73,8 @@ class JobRecord:
 
 
 _JOBS: dict[str, JobRecord] = {}
-_MODELS: dict[str, bytes] = {}
 _TASKS: dict[str, asyncio.Task] = {}
+_store: ModelStore = ModelStore()
 
 
 def _apply_progress(job: JobRecord, index: int, total: int, message: str) -> None:
@@ -130,9 +139,20 @@ async def run_job(job: JobRecord, runner: Runner) -> None:
         job.error = _safe_error(exc)
         job.message = job.error
     else:
-        model_id = str(uuid.uuid4())
-        _MODELS[model_id] = result_bytes
-        job.result = JobResult(modelId=model_id)
+        record = _store.save(
+            result_bytes,
+            provider_id=job.provider_name,
+            source_job_id=job.job_id,
+            spec_hash=job.spec_hash,
+        )
+        job.result = JobResult(
+            modelId=record.id,
+            format=record.format,
+            mime=record.mime,
+            sizeBytes=record.size_bytes,
+            providerId=record.provider_id,
+            sourceJobId=record.source_job_id,
+        )
         job.status = "done"
         job.progress = 1.0
         job.message = "生成完成"
@@ -149,9 +169,10 @@ def create_job(
     runner: Runner,
     timeout_seconds: float | None = None,
     attempt: int = 1,
+    spec_hash: str = "",
 ) -> JobRecord:
     deadline = time.time() + timeout_seconds if timeout_seconds else None
-    job = JobRecord(str(uuid.uuid4()), provider_name, deadline_at=deadline, attempt=attempt)
+    job = JobRecord(str(uuid.uuid4()), provider_name, deadline_at=deadline, attempt=attempt, spec_hash=spec_hash)
     _JOBS[job.job_id] = job
     _TASKS[job.job_id] = asyncio.create_task(run_job(job, runner))
     return job
@@ -189,4 +210,8 @@ def get_job(job_id: str) -> JobRecord | None:
 
 
 def get_model(model_id: str) -> bytes | None:
-    return _MODELS.get(model_id)
+    return _store.read_bytes(model_id)
+
+
+def get_model_record(model_id: str) -> ModelRecord | None:
+    return _store.get(model_id)

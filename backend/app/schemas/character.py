@@ -112,6 +112,25 @@ class JobStep(_CamelModel):
 
 class JobResult(_CamelModel):
     model_id: str = Field(alias="modelId")
+    # Phase 2.3-B output metadata (all optional / backward compatible).
+    format: str | None = None
+    mime: str | None = None
+    size_bytes: int | None = Field(default=None, alias="sizeBytes")
+    provider_id: str | None = Field(default=None, alias="providerId")
+    source_job_id: str | None = Field(default=None, alias="sourceJobId")
+
+
+class ModelMetaResponse(_CamelModel):
+    """Safe metadata view of a persisted model (no server file paths)."""
+
+    model_id: str = Field(alias="modelId")
+    format: str
+    mime: str
+    size_bytes: int = Field(alias="sizeBytes")
+    provider_id: str = Field(alias="providerId")
+    source_job_id: str = Field(alias="sourceJobId")
+    spec_hash: str = Field(alias="specHash")
+    created_at: float = Field(alias="createdAt")
 
 
 class JobStatusResponse(_CamelModel):
