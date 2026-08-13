@@ -7,8 +7,9 @@ through the AIImage3DProvider contract.
 
 from __future__ import annotations
 
-from .base import AIImage3DProvider, ProgressCallback, ProviderError
+from .base import AIImage3DProvider, CancellationToken, ProgressCallback, ProviderError
 from ..schemas.character import CharacterSpec
+from ..schemas.vision import VisionImageInput
 
 
 class RealImage3DProviderPlaceholder(AIImage3DProvider):
@@ -18,7 +19,13 @@ class RealImage3DProviderPlaceholder(AIImage3DProvider):
     name = "Real AI (placeholder)"
     description = "A real image-to-3D vendor will live here. Not implemented in Phase 1."
 
-    async def generate(self, spec: CharacterSpec, on_progress: ProgressCallback) -> bytes:
+    async def generate(
+        self,
+        spec: CharacterSpec,
+        references: list[VisionImageInput],
+        on_progress: ProgressCallback,
+        cancel_event: CancellationToken | None = None,
+    ) -> bytes:
         raise ProviderError(
             "The real image-to-3D provider is not implemented yet. Use the Mock provider in Demo Mode."
         )

@@ -2,8 +2,12 @@
 
 This is what keeps Demo Mode fully functional with no AI API and no network.
 The pipeline is character-aware: steps and the returned model reflect the
-character type (human chibi vs anthro fox), proving the system is not hardwired
-to humans.
+character type (human chibi vs anthro fox).
+
+Phase 2.3-A additions:
+- configurable duration (AIVCS_MOCK3D_DURATION_SECONDS);
+- cooperative cancel via cancel_event (raises ProviderCancelledError);
+- deterministic failure when userNotes contains "fail3d" (tests failure state).
 """
 
 from __future__ import annotations
@@ -11,22 +15,12 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from .base import AIImage3DProvider, ProgressCallback
+from .base import AIImage3DProvider, CancellationToken, ProgressCallback, ProviderCancelledError, ProviderError
 from ..schemas.character import CharacterSpec
+from ..schemas.vision import VisionImageInput
 from .. import config
 
 NON_HUMAN_TYPES = {"anthro", "animal", "fantasy-creature", "robot", "alien", "custom"}
-
-DEFAULTS = {
-    "parsing": 0.35,
-    "species": 0.45,
-    "images": 0.45,
-    "topology": 1.2,
-    "materials": 0.6,
-    "fur": 0.5,
-    "rigging": 0.6,
-    "final": 0.4,
-}
 
 
 def _build_steps(spec: CharacterSpec) -> list[str]:
@@ -71,15 +65,33 @@ class MockImage3DProvider(AIImage3DProvider):
     name = "Mock"
     description = "Local mock that returns a bundled demo model matching the character type. No AI API required."
 
-    async def generate(self, spec: CharacterSpec, on_progress: ProgressCallback) -> bytes:
+    async def generate(
+        self,
+        spec: CharacterSpec,
+        references: list[VisionImageInput],
+        on_progress: ProgressCallback,
+        cancel_event: CancellationToken | None = None,
+    ) -> bytes:
         steps = _build_steps(spec)
         total = len(steps)
+        duration = max(float(config.MOCK3D_DURATION_SECONDS), 0.0)
+        base = duration / max(total, 1)
+
         for i, label in enumerate(steps):
+            if cancel_event is not None and cancel_event.is_cancelled:
+                raise ProviderCancelledError("生成已取消")
             message = label
             if "物种" in label and spec.species.confidence is None:
                 message = "无法确定角色物种，请选择或补充参考图。继续使用当前设定生成。"
             on_progress(i, total, message)
-            await asyncio.sleep(DEFAULTS["parsing"] if i == 0 else 0.5)
+            # the topology step carries more simulated work
+            weight = 2.0 if "拓扑" in label else 1.0
+            await asyncio.sleep(base * weight)
+
+        if cancel_event is not None and cancel_event.is_cancelled:
+            raise ProviderCancelledError("生成已取消")
+        if "fail3d" in (spec.user_notes or "").lower():
+            raise ProviderError("Mock 强制失败（userNotes 包含 fail3d）")
         on_progress(total, total, "生成完成")
 
         is_creature = spec.character_type in NON_HUMAN_TYPES

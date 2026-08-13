@@ -411,7 +411,7 @@ export interface GenerationJobStep {
 export interface GenerationJob {
   id: string
   provider: string
-  status: 'queued' | 'running' | 'done' | 'failed'
+  status: 'queued' | 'running' | 'done' | 'failed' | 'timed_out' | 'cancelled'
   progress: number
   message: string
   steps: GenerationJobStep[]
@@ -419,6 +419,13 @@ export interface GenerationJob {
   finishedAt: string | null
   error: string | null
   resultModelId: string | null
+  /** Phase 2.3 state machine metadata (optional, backward compatible). */
+  deadlineAt?: number | null
+  durationMs?: number | null
+  retryable?: boolean
+  cancelledByUser?: boolean
+  timedOut?: boolean
+  attempt?: number
 }
 
 export const IPC_CHANNELS = {

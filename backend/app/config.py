@@ -30,6 +30,9 @@ DEMO_FOX_MODEL_PATH = Path(
 # The provider selected on the backend when a client omits it.
 DEFAULT_PROVIDER = os.environ.get("AIVCS_DEFAULT_PROVIDER", "mock")
 
+# Simulated duration of a Mock image-to-3D generation (seconds).
+MOCK3D_DURATION_SECONDS = float(os.environ.get("AIVCS_MOCK3D_DURATION_SECONDS", "5"))
+
 # CORS origins allowed to talk to this backend (the Electron renderer).
 CORS_ORIGINS = [origin.strip() for origin in os.environ.get("AIVCS_CORS_ORIGINS", "*").split(",")]
 

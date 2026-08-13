@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 
 from .. import config
-from ..jobs import create_job, get_job, get_model
+from ..jobs import cancel_job, create_job, get_job, get_model
 from ..providers.registry import get_provider, list_providers
 from ..schemas.character import GenerateRequest, JobStatusResponse
 
@@ -24,7 +24,10 @@ async def generate_image_to_3d(request: GenerateRequest):
     provider = get_provider(request.provider)
     job = create_job(
         provider.name,
-        lambda on_progress: provider.generate(request.spec, on_progress),
+        lambda on_progress, cancel_event: provider.generate(
+            request.spec, request.references, on_progress, cancel_event
+        ),
+        timeout_seconds=request.timeout_seconds,
     )
     return {"jobId": job.job_id}
 
@@ -35,6 +38,14 @@ async def get_generation_job(job_id: str):
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     return job.to_response()
+
+
+@router.post("/generate/jobs/{job_id}/cancel")
+async def cancel_generation_job(job_id: str):
+    cancelled = cancel_job(job_id)
+    if cancelled is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return {"jobId": job_id, "cancelled": cancelled}
 
 
 @router.get("/models/{model_id}")

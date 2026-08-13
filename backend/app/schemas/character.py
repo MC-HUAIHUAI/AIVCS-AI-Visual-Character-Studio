@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from .vision import VisionAnalysisMeta
+from .vision import VisionAnalysisMeta, VisionImageInput
 
 CharacterStyle = Literal["stylized", "realistic", "anime", "pixel"]
 CharacterGender = Literal["female", "male", "neutral"]
-JobStatus = Literal["queued", "running", "done", "failed"]
+JobStatus = Literal["queued", "running", "done", "failed", "timed_out", "cancelled"]
 
 
 class _CamelModel(BaseModel):
@@ -91,6 +91,17 @@ class GenerateRequest(_CamelModel):
     provider: str = "mock"
     spec: CharacterSpec
     reference_image_ids: list[str] = Field(default_factory=list, alias="referenceImageIds")
+    # Phase 2.3: actual reference image payloads (data URLs) so a real image-to-3D
+    # provider can consume them. Reuses VisionImageInput - no second input type.
+    references: list[VisionImageInput] = Field(default_factory=list)
+    timeout_seconds: float | None = Field(default=None, alias="timeoutSeconds")
+
+    @field_validator("references")
+    @classmethod
+    def references_within_limit(cls, v: list[VisionImageInput]) -> list[VisionImageInput]:
+        if len(v) > 4:
+            raise ValueError("一次最多支持 4 张参考图（front/side/back/custom）")
+        return v
 
 
 class JobStep(_CamelModel):
@@ -111,6 +122,13 @@ class JobStatusResponse(_CamelModel):
     steps: list[JobStep]
     error: str | None = None
     result: JobResult | None = None
+    # Phase 2.3 state machine metadata (all optional / backward compatible).
+    deadline_at: float | None = Field(default=None, alias="deadlineAt")
+    duration_ms: int | None = Field(default=None, alias="durationMs")
+    retryable: bool = False
+    cancelled_by_user: bool = Field(default=False, alias="cancelledByUser")
+    timed_out: bool = Field(default=False, alias="timedOut")
+    attempt: int = 1
 
 
 class HealthResponse(_CamelModel):
