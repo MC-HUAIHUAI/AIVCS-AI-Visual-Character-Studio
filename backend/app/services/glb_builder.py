@@ -111,6 +111,39 @@ def _pad4(buf: bytearray) -> None:
         buf += b"\x00"
 
 
+def validate_glb(data: bytes) -> None:
+    """Validate a GLB is structurally legal. Raises ValueError on failure."""
+    if len(data) < 20:
+        raise ValueError("too short")
+    if data[:4] != b"glTF":
+        raise ValueError("bad magic")
+    _magic, version, total = struct.unpack("<4sII", data[:12])
+    if version != 2:
+        raise ValueError(f"unsupported version {version}")
+    if total != len(data):
+        raise ValueError("length mismatch")
+    clen, ctype = struct.unpack("<I4s", data[12:20])
+    if ctype != b"JSON":
+        raise ValueError("missing JSON chunk")
+    if 20 + clen > len(data):
+        raise ValueError("JSON chunk out of bounds")
+    try:
+        gltf = json.loads(data[20 : 20 + clen])
+    except Exception as exc:  # noqa: BLE001
+        raise ValueError("invalid JSON chunk") from exc
+    if gltf.get("asset", {}).get("version") != "2.0":
+        raise ValueError("invalid asset version")
+    if "buffers" not in gltf or not gltf["buffers"]:
+        raise ValueError("no buffers")
+    if not isinstance(gltf.get("meshes"), list):
+        raise ValueError("no meshes")
+    buf_len = gltf["buffers"][0].get("byteLength", 0)
+    for acc in gltf.get("accessors", []):
+        view = gltf["bufferViews"][acc["bufferView"]]
+        if view["byteOffset"] + view["byteLength"] > buf_len:
+            raise ValueError("accessor out of buffer bounds")
+
+
 def build_glb(primitives: list[Primitive], scale: float = 1.0) -> bytes:
     """Serialize primitives (scaled by `scale`) into a binary glTF 2.0 .glb."""
     meshes: list[_Mesh] = []

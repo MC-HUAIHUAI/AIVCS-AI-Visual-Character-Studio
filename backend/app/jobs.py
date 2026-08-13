@@ -19,7 +19,7 @@ import time
 import uuid
 from typing import Awaitable, Callable
 
-from .providers.base import CancellationToken, ProgressCallback, ProviderCancelledError, ProviderError
+from .providers.base import CancellationToken, ProgressCallback, ProviderCancelledError, ProviderError, ProviderTimeoutError
 from .schemas.character import JobResult, JobStep, JobStatusResponse
 from .services.model_store import ModelRecord, ModelStore
 
@@ -120,6 +120,12 @@ async def run_job(job: JobRecord, runner: Runner) -> None:
         else:
             result_bytes = await coro
     except TimeoutError:
+        job.status = "timed_out"
+        job.timed_out = True
+        job.retryable = True
+        job.error = "生成超时"
+        job.message = "生成超时"
+    except ProviderTimeoutError:
         job.status = "timed_out"
         job.timed_out = True
         job.retryable = True

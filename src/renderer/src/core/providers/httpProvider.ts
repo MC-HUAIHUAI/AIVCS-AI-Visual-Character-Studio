@@ -71,6 +71,56 @@ export async function downloadModel(
   return { bytes, mime: res.headers.get('Content-Type') ?? undefined, sizeBytes: bytes.byteLength }
 }
 
+/** Shared backend job flow used by backend providers (create -> poll -> download). */
+async function runBackendGenerate(
+  backendProviderId: string,
+  spec: CharacterSpec,
+  references: VisionImageInput[],
+  onProgress: (p: GenerationProgress) => void,
+  signal?: GenerationAbortSignal
+): Promise<GeneratedModelResult> {
+  const created = await createGenerationJob({
+    backendProviderId,
+    spec,
+    references: references.map((r) => ({ imageId: r.imageId, dataUrl: r.dataUrl, view: r.view ?? null })),
+    timeoutSeconds: DEFAULT_GENERATION_TIMEOUT_SECONDS
+  })
+
+  let dto: JobDto | null = null
+  for (;;) {
+    dto = await pollGenerationJob(created.jobId)
+    onProgress({
+      step: dto.steps.filter((s) => s.status === 'done' || s.status === 'running').length,
+      totalSteps: dto.steps.length,
+      percent: dto.progress,
+      message: dto.message
+    })
+    if (isTerminal(dto.status)) break
+    if (signal?.aborted) {
+      await cancelGenerationJob(created.jobId)
+      throw new Error('generation aborted')
+    }
+    await sleep(450)
+  }
+  if (dto && dto.status === 'done' && dto.result?.model_id) {
+    const { bytes, mime, sizeBytes } = await downloadModel(dto.result.model_id)
+    return {
+      modelId: dto.result.model_id,
+      name: 'generated_character',
+      format: (dto.result.format ?? 'glb') as ModelFormat,
+      sizeBytes: dto.result.size_bytes ?? sizeBytes,
+      providerId: dto.result.provider_id,
+      sourceJobId: dto.result.source_job_id,
+      mime: dto.result.mime ?? mime,
+      bytes
+    }
+  }
+  if (dto?.status === 'cancelled' || signal?.aborted) {
+    throw new Error('generation aborted')
+  }
+  throw new Error(safeErrorMessage(new Error(dto?.error ?? '生成失败')))
+}
+
 /**
  * Job-aware backend provider. The generationStore drives the full job lifecycle
  * (create/poll/cancel/download) through generationApi; this class implements the
@@ -98,47 +148,7 @@ export class BackendImage3DProvider implements AIImage3DProvider {
     onProgress: (p: GenerationProgress) => void,
     signal?: GenerationAbortSignal
   ): Promise<GeneratedModelResult> {
-    const created = await createGenerationJob({
-      backendProviderId: this.capabilities.backendId,
-      spec,
-      references: references.map((r) => ({ imageId: r.imageId, dataUrl: r.dataUrl, view: r.view ?? null })),
-      timeoutSeconds: DEFAULT_GENERATION_TIMEOUT_SECONDS
-    })
-
-    let dto: JobDto | null = null
-    for (;;) {
-      dto = await pollGenerationJob(created.jobId)
-      onProgress({
-        step: dto.steps.filter((s) => s.status === 'done' || s.status === 'running').length,
-        totalSteps: dto.steps.length,
-        percent: dto.progress,
-        message: dto.message
-      })
-      if (isTerminal(dto.status)) break
-      if (signal?.aborted) {
-        await cancelGenerationJob(created.jobId)
-        throw new Error('generation aborted')
-      }
-      await sleep(450)
-    }
-
-    if (dto && dto.status === 'done' && dto.result?.model_id) {
-      const { bytes, mime, sizeBytes } = await downloadModel(dto.result.model_id)
-      return {
-        modelId: dto.result.model_id,
-        name: 'generated_character',
-        format: (dto.result.format ?? 'glb') as ModelFormat,
-        sizeBytes: dto.result.size_bytes ?? sizeBytes,
-        providerId: dto.result.provider_id,
-        sourceJobId: dto.result.source_job_id,
-        mime: dto.result.mime ?? mime,
-        bytes
-      }
-    }
-    if (dto?.status === 'cancelled' || signal?.aborted) {
-      throw new Error('generation aborted')
-    }
-    throw new Error(safeErrorMessage(new Error(dto?.error ?? '生成失败')))
+    return runBackendGenerate(this.capabilities.backendId, spec, references, onProgress, signal)
   }
 }
 
@@ -168,41 +178,37 @@ export class LocalLowPower3DProvider implements AIImage3DProvider {
     onProgress: (p: GenerationProgress) => void,
     signal?: GenerationAbortSignal
   ): Promise<GeneratedModelResult> {
-    const created = await createGenerationJob({
-      backendProviderId: this.capabilities.backendId,
-      spec,
-      references: references.map((r) => ({ imageId: r.imageId, dataUrl: r.dataUrl, view: r.view ?? null })),
-      timeoutSeconds: DEFAULT_GENERATION_TIMEOUT_SECONDS
-    })
-    let dto: JobDto | null = null
-    for (;;) {
-      dto = await pollGenerationJob(created.jobId)
-      onProgress({
-        step: dto.steps.filter((s) => s.status === 'done' || s.status === 'running').length,
-        totalSteps: dto.steps.length,
-        percent: dto.progress,
-        message: dto.message
-      })
-      if (isTerminal(dto.status)) break
-      if (signal?.aborted) {
-        await cancelGenerationJob(created.jobId)
-        throw new Error('generation aborted')
-      }
-      await sleep(450)
-    }
-    if (dto && dto.status === 'done' && dto.result?.model_id) {
-      const { bytes, mime, sizeBytes } = await downloadModel(dto.result.model_id)
-      return {
-        modelId: dto.result.model_id,
-        name: 'generated_character',
-        format: (dto.result.format ?? 'glb') as ModelFormat,
-        sizeBytes: dto.result.size_bytes ?? sizeBytes,
-        providerId: dto.result.provider_id,
-        sourceJobId: dto.result.source_job_id,
-        mime: dto.result.mime ?? mime,
-        bytes
-      }
-    }
-    throw new Error(safeErrorMessage(new Error(dto?.error ?? '生成失败')))
+    return runBackendGenerate(this.capabilities.backendId, spec, references, onProgress, signal)
+  }
+}
+
+/**
+ * Frontend handle for the backend MockRemote3DProvider (simulated vendor
+ * "create -> poll -> download" pipeline). Drives the job lifecycle via
+ * capabilities.backendId.
+ */
+export class MockRemote3DProvider implements AIImage3DProvider {
+  readonly id = 'backend-mock-remote'
+  readonly name = 'Mock Remote（模拟厂商）'
+  readonly description =
+    '模拟真实厂商的 创建任务→轮询→下载 GLB 流程，无需任何真实 3D API。需要运行 `npm run backend`。'
+  readonly requiresBackend = true
+  readonly capabilities = {
+    mode: 'cloud' as const,
+    gpuRequired: false,
+    maxReferences: 4,
+    outputFormat: 'glb' as const,
+    supportsCancel: true,
+    supportsTimeout: true,
+    backendId: 'mock-remote'
+  }
+
+  async generate(
+    spec: CharacterSpec,
+    references: VisionImageInput[],
+    onProgress: (p: GenerationProgress) => void,
+    signal?: GenerationAbortSignal
+  ): Promise<GeneratedModelResult> {
+    return runBackendGenerate(this.capabilities.backendId, spec, references, onProgress, signal)
   }
 }

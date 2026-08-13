@@ -71,3 +71,7 @@ class ProviderError(RuntimeError):
 
 class ProviderCancelledError(ProviderError):
     """Raised by providers when the job was cancelled mid-generation."""
+
+
+class ProviderTimeoutError(ProviderError):
+    """Raised by providers when a remote task times out (mapped to job timed_out)."""

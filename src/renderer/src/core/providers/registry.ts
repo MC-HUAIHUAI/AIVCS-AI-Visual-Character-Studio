@@ -1,6 +1,6 @@
 import type { AIImage3DProvider } from './aiProvider'
 import { MockImage3DProvider } from './mockProvider'
-import { BackendImage3DProvider, LocalLowPower3DProvider } from './httpProvider'
+import { BackendImage3DProvider, LocalLowPower3DProvider, MockRemote3DProvider } from './httpProvider'
 
 /**
  * Registered AI providers. The default is the local mock so Demo Mode works
@@ -9,7 +9,8 @@ import { BackendImage3DProvider, LocalLowPower3DProvider } from './httpProvider'
 export const providers: AIImage3DProvider[] = [
   new MockImage3DProvider(),
   new BackendImage3DProvider(),
-  new LocalLowPower3DProvider()
+  new LocalLowPower3DProvider(),
+  new MockRemote3DProvider()
 ]
 
 export function getProvider(id: string): AIImage3DProvider {
