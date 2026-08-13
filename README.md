@@ -2,7 +2,7 @@
 
 面向 Windows 的 AI 虚拟主播（VTuber / 虚拟形象）制作软件。
 
-当前版本：**0.1.0（Phase 1 完成）**
+当前版本：**0.2.0（Phase 2.1 完成）**
 
 ## 技术栈
 
@@ -67,19 +67,29 @@ npm run dev
 - **自然语言编辑**：Mock 解释器把自然语言指令（如"把尾巴变得更蓬松"）转换为结构化 `CharacterEditCommand`
 - **GLB/GLTF 导出**：从视口导出当前模型（GLB 可用；GLTF/L2D/VRM 为接口预留）
 
+## 已实现功能（Phase 2.1 — Vision 分析基础 + 真实 Kimi）
+
+- **Vision Provider 抽象**：前端 `AIVisionProvider`（TS）+ 后端 `AIVisionProvider`（Python ABC），与 Image-to-3D Provider 完全对称
+- **Vision Mock 全链路**：参考图 → Mock 分析 → Review 建议列表 → 用户逐条确认 → `applyVisionResult` → CharacterSpec（离线可演示，无任何 API）
+- **Review / 采纳流程**：`VisionAnalysisPanel` + `SpecReviewList`；AI 仅提供建议，未采纳的字段绝不写入 CharacterSpec；采纳后经枚举 clamp + 数值 clamp + `normalizeSpec` 合并
+- **真实 Kimi Vision**：`backend/app/providers/vision/kimi.py` 接入 Moonshot Kimi（模型 `kimi-k2.6`），OpenAI 兼容 `/chat/completions` + `image_url`（data URL）+ `response_format: json_object`；输出经 `vision_spec_mapper` 归一（枚举白名单、未知→custom、物种不确定→confidence null、palette 仅 `#RRGGBB`）
+- **安全边界**：`sourceImageIds` 由服务端从请求生成（不信任模型）；`AIVCS_KIMI_API_KEY` 仅后端环境变量 / `backend/.env`，前端/项目文件/IPC 零接触；未配置 Key 时自动回退 Mock，后端照常启动
+- **错误处理**：401/403、429、5xx、超时、响应非 JSON、无 choices、空内容均映射为用户安全的中文提示（502/503），UI 不崩溃
+- **schema 一致性**：`npm run check:schema` 校验 TS ↔ Pydantic 7 组模型字段一致
+
 ## Mock 功能（模拟，非真实实现）
 
 - **Mock AI Provider**（前端本地 + 后端各一份）：按角色类型返回对应演示 GLB（人类→人形、非人类→兽人狐），模拟各阶段耗时与进度；无需网络、无需任何 AI API
-- **物种识别**：不真正分析图片；当物种置信度为空时明确提示"无法确定角色物种，请选择或补充参考图"
+- **Vision Mock**：本地模拟图片分析（返回确定性结果 + "Mock 模式"标记），保证无 Key 离线也可演示完整的分析→Review→采纳链路
 - **自然语言编辑**：仅解析为结构化命令并展示，不实际修改模型
 - **毛发**：只以样式字段 + 步骤提示表现，无真实毛发网格
 
 ## 尚未实现功能（后续 Phase）
 
 - 真实 Image-to-3D（`RealImage3DProviderPlaceholder` 已占位，抛"未实现"）
-- 真实物种 / 外观识别（AI 分析参考图）
 - 真实骨骼生成与蒙皮绑定（RigProfile 数据已就绪）
 - 真实毛发（贴图/法线/材质、Hair cards、Groom curves）
+- 多视角一致性分析（正面/侧面/背面合并；API 数据结构已支持多图，待实现）
 - VRM 导出（非人类结构作为 Extra Bones 的规则已定义）
 - Live2D 导出 / 完整 Live2D 支持
 - 动画、物理、VTuber 面部/动作追踪
@@ -106,3 +116,12 @@ npm run dev
 - 后端端口固定为 **8321**（避免与常见 8000 端口冲突）。如端口被占用可修改 `package.json` 中 `backend` 脚本与 `src/renderer/src/core/providers/httpProvider.ts` 的 `AIVCS_BACKEND_URL`。
 - 生成模型为运行时内存缓存，不随项目文件持久化；重新打开项目后需重新生成。
 - Phase 1 刻意不接入任何付费 AI API，API Key 零硬编码。
+
+## Kimi Vision 接入说明（Phase 2.1）
+
+- 配置：在 `backend/.env`（git 忽略，模板见 `backend/.env.example`）填入 `AIVCS_KIMI_API_KEY`；可选 `AIVCS_KIMI_BASE_URL`（默认 `https://api.moonshot.cn/v1`）、`AIVCS_KIMI_MODEL`（默认 `kimi-k2.6`）、`AIVCS_KIMI_TIMEOUT_SECONDS`（默认 120）。
+- 未配置 Key 时：Vision 后端自动回退 Mock，`provider='kimi'` 返回 503；`provider='auto'` 有 Key 走 Kimi、无 Key 走 Mock。前端无需感知。
+- **官方能力确认**：`kimi-k2.6` 原生支持图片输入（`content` 数组 + `image_url`，data URL），并支持 `response_format: {"type": "json_object"}`。
+- **temperature 限制**：该模型只允许 `temperature=1`（其余值返回 HTTP 400 `invalid temperature: only 1 is allowed for this model`），因此本实现不发送 temperature 参数。
+- **限速与延迟现象（实测）**：当前账号组织级 `RPM = 3`（每分钟最多 3 次请求），超出返回 429。真实图片分析单次耗时约 **30–85 秒**（含图片编码与推理）。因此批量测试需以 ≥25 秒间隔逐步调用；如需更高吞吐请在 Moonshot 平台提升 RPM。
+- 测试结果（6 张像素风测试图）：人类/兽人狐/猫/龙/机器人均正确识别类型/物种/体型并给出置信度；模糊图正确返回低置信度与"无法确定角色物种，请选择或补充参考图"警告，不做猜测。
