@@ -114,7 +114,6 @@ class KimiVisionProvider(AIVisionProvider):
             ],
             "response_format": {"type": "json_object"},
             "max_tokens": 4000,
-            "temperature": 0.2,
             "stream": False,
         }
 
@@ -145,17 +144,26 @@ class KimiVisionProvider(AIVisionProvider):
         req.add_header("Authorization", f"Bearer {config.KIMI_API_KEY}")
         try:
             with request.urlopen(req, timeout=config.KIMI_TIMEOUT_SECONDS) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
+                raw_body = resp.read().decode("utf-8")
         except error.HTTPError as exc:
             self._raise_http_error(exc)
+        except TimeoutError as exc:
+            raise VisionProviderError("Kimi 请求超时，请稍后重试") from exc
         except error.URLError as exc:
             reason = getattr(exc, "reason", None)
             if isinstance(reason, TimeoutError):
                 raise VisionProviderError("Kimi 请求超时，请稍后重试") from exc
             raise VisionProviderError("Kimi 请求失败，请稍后重试") from exc
 
-        choices = data.get("choices") or []
-        if not choices:
+        try:
+            data = json.loads(raw_body)
+        except json.JSONDecodeError as exc:
+            raise VisionProviderError("Kimi 返回格式错误（响应不是 JSON）") from exc
+        if not isinstance(data, dict):
+            raise VisionProviderError("Kimi 返回格式错误（响应不是 JSON 对象）")
+
+        choices = data.get("choices")
+        if not isinstance(choices, list) or not choices:
             raise VisionProviderError("Kimi 返回了无效响应（无 choices）")
         message = choices[0].get("message") or {}
         content = message.get("content")
