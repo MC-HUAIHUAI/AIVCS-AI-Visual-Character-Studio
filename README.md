@@ -2,7 +2,7 @@
 
 面向 Windows 的 AI 虚拟主播（VTuber / 虚拟形象）制作软件。
 
-当前版本：**0.2.1（Phase 2.2 完成）**
+当前版本：**0.2.2（Phase 2.3 完成）**
 
 ## 技术栈
 
@@ -87,6 +87,20 @@ npm run dev
 - **缺失视角提示**：仅 front / front+side 时给出 UI 警告（不进 CharacterSpec）
 - **测试**：`npm run test:backend`（20）+ `npm run test:frontend`（19，纯逻辑，无新依赖）
 
+## 已实现功能（Phase 2.3 — Image-to-3D 任务管线 + 本地低功耗 3D 原型）
+
+- **3D Job 状态机**（`backend/app/jobs.py`）：`queued → running → done | failed | timed_out | cancelled`（queued 亦可直接 cancelled/timed_out）；`deadline + asyncio.wait_for` 超时→`timed_out`、用户取消→`cancelled`、Provider 异常→`failed(retryable)`；`timed_out` 与 `failed`、`cancelled` 与 `timed_out` 均为不同终态；**不自动重试**
+- **取消/超时 API**：`POST /api/v1/generate/jobs/{id}/cancel`；请求可传 `timeoutSeconds`；Provider 契约新增 `CancellationToken`（协作式取消，步骤间检查，抛 `ProviderCancelledError`）
+- **持久化 ModelStore**（`backend/app/services/model_store.py`）：`backend/data/models/{id}.glb` + 轻量 JSON sidecar；原子写入（临时文件 + rename）；`specHash`（sha256 确定性、不含 Key）；TTL 清理（`AIVCS_MODEL_TTL_HOURS`，默认 24h，注入 now/旧 mtime 可测）；重启后模型仍可读取；`GET /models/{id}/meta` 提供安全元数据
+- **前端对齐**：`generationStore` 完整状态机 + `cancelJob`/`retryJob`（重试=全新 Job ID，旧 Job 保留）+ 轮询仅到终态；ProgressPanel 显示排队/生成中/完成/失败/超时/已取消 + [取消]/[重试]；`ModelAsset` 增加 providerId/sourceJobId/sizeBytes/mime（来自 JobResult，不猜测）
+- **Provider 能力描述**：`AIImage3DProvider`（双端）增加 `gpu_required / max_references / output_format / supports_cancel / supports_timeout / backendId`；前端 `ProviderCapabilities`
+- **LocalLowPower3DProvider**（`backend/app/providers/local_lowpower.py`，id=`local-lowpower`）：
+  - **定位**：CPU 本地、确定性、低功耗的 image-to-3D 原型；证明"CharacterSpec + 多视角参考图 → 合法 GLB"的完整链路；可作为 Mock 到云端真实 3D 之间的中间档
+  - **能力**：无需 GPU、无大型模型、无网络/云端 API、无 Key；内置最小 PNG 解码器提取参考图主色调（失败回退 `appearance.palette → fur.colors → spec hash` 确定性色）；按 bodyType（humanoid / biped-anthro / quadruped / bird / dragon / robot / 回退）与 anatomy 布尔（耳/尾/翼/角/吻部）生成低模拓扑，高度按 `heightCm` 缩放
+  - **限制**：低模简化造型（box/sphere 组合），非高质量网格；参考图仅用于取色，不做形状重建；不确定性的艺术质量
+  - **使用**：后端自动注册；前端 Provider 选择「本地低功耗 3D（CPU）」；经现有 JobManager（cancel/timeout）+ ModelStore 落盘；输出 GLB 已验证可被 three.js 加载
+- **测试**：`npm run test:backend`（64：状态机/取消/超时/ModelStore/GLB 结构/低功耗 Provider/旧请求兼容）+ `npm run test:frontend`（19+17，纯逻辑）
+
 ## Mock 功能（模拟，非真实实现）
 
 - **Mock AI Provider**（前端本地 + 后端各一份）：按角色类型返回对应演示 GLB（人类→人形、非人类→兽人狐），模拟各阶段耗时与进度；无需网络、无需任何 AI API
@@ -96,7 +110,7 @@ npm run dev
 
 ## 尚未实现功能（后续 Phase）
 
-- 真实 Image-to-3D（`RealImage3DProviderPlaceholder` 已占位，抛"未实现"）
+- 真实云端 Image-to-3D（`RealImage3DProviderPlaceholder` 已占位；`LocalLowPower3DProvider` 为本地 CPU 原型，非云端质量）
 - 真实骨骼生成与蒙皮绑定（RigProfile 数据已就绪）
 - 真实毛发（贴图/法线/材质、Hair cards、Groom curves）
 - VRM 导出（非人类结构作为 Extra Bones 的规则已定义）
