@@ -1,0 +1,49 @@
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import Response
+
+from .. import config
+from ..jobs import create_job, get_job, get_model
+from ..providers.registry import get_provider, list_providers
+from ..schemas.character import GenerateRequest, JobStatusResponse
+
+router = APIRouter(prefix="/api/v1")
+
+
+@router.get("/health")
+async def health():
+    return {
+        "status": "ok",
+        "name": config.BACKEND_NAME,
+        "version": config.BACKEND_VERSION,
+        "providers": list_providers(),
+    }
+
+
+@router.post("/generate/image-to-3d", status_code=202)
+async def generate_image_to_3d(request: GenerateRequest):
+    provider = get_provider(request.provider)
+    job = create_job(
+        provider.name,
+        lambda on_progress: provider.generate(request.spec, on_progress),
+    )
+    return {"jobId": job.job_id}
+
+
+@router.get("/generate/jobs/{job_id}", response_model=JobStatusResponse)
+async def get_generation_job(job_id: str):
+    job = get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job.to_response()
+
+
+@router.get("/models/{model_id}")
+async def download_model(model_id: str):
+    data = get_model(model_id)
+    if data is None:
+        raise HTTPException(status_code=404, detail="Model not found")
+    return Response(
+        content=data,
+        media_type="model/gltf-binary",
+        headers={"Content-Disposition": f'attachment; filename="{model_id}.glb"'},
+    )
