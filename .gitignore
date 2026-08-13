@@ -37,3 +37,7 @@ electron-builder-output/
 
 # TypeScript incremental
 *.tsbuildinfo
+
+# Frontend review logic test build output
+.review-test/
+.cache/

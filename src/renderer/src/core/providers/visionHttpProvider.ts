@@ -33,6 +33,7 @@ export class VisionHttpProvider implements AIVisionProvider {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         provider: 'auto',
+        analysisMode: 'joint',
         references: refs.map((r) => ({
           imageId: r.imageId,
           dataUrl: r.dataUrl,

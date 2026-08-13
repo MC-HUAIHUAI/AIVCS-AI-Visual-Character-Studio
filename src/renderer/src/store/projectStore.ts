@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { CharacterSpec, ModelAsset, ProjectData } from '@shared/types'
+import type { CharacterSpec, ImageAsset, ModelAsset, ProjectData } from '@shared/types'
 import {
   createProject,
   importImages as importImagesViaIpc,
@@ -20,6 +20,7 @@ interface ProjectState {
   newProject: (name: string) => void
   importImages: () => Promise<void>
   removeImage: (id: string) => void
+  updateImage: (id: string, patch: Partial<ImageAsset>) => void
   addModel: (model: ModelAsset, buffer?: ArrayBuffer) => void
   removeModel: (id: string) => void
   updateSpec: (patch: Partial<CharacterSpec>) => void
@@ -66,6 +67,15 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       },
       isDirty: isDirty || images.length !== project.images.length,
       selectedImageId: get().selectedImageId === id ? null : get().selectedImageId
+    })
+  },
+
+  updateImage: (id, patch) => {
+    const { project } = get()
+    const images = project.images.map((img) => (img.id === id ? { ...img, ...patch } : img))
+    set({
+      project: { ...project, images, updatedAt: new Date().toISOString() },
+      isDirty: true
     })
   },
 

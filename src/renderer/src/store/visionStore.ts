@@ -1,28 +1,27 @@
 import { create } from 'zustand'
+import type { ViewAnalysis, ViewConflict } from '@shared/types'
 import type { VisionAnalysisResult, VisionImageInput } from '../core/providers/visionProvider'
 import { getVisionProvider } from '../core/providers/visionRegistry'
 import { applyVisionResult } from '../core/spec/applyVisionResult'
-import type { ConfirmedSpecPatch } from '../core/spec/applyVisionResult'
+import {
+  applyConflictDecision,
+  buildReviewSuggestions
+} from '../core/spec/visionReviewLogic'
+import type { VisionSuggestion } from '../core/spec/visionReviewLogic'
 import { useProjectStore } from './projectStore'
 
 export type VisionStatus = 'idle' | 'analyzing' | 'success' | 'error'
-export type SuggestionStatus = 'pending' | 'accepted' | 'modified' | 'rejected'
-
-export interface VisionSuggestion {
-  id: string
-  field: string
-  fieldLabel: string
-  valueLabel: string
-  confidence: number | null
-  status: SuggestionStatus
-  patch: ConfirmedSpecPatch
-}
+export type SuggestionStatus = VisionSuggestion['status']
 
 interface VisionState {
   status: VisionStatus
   providerId: string | null
   sourceImageIds: string[]
   result: VisionAnalysisResult | null
+  viewAnalyses: ViewAnalysis[]
+  conflicts: ViewConflict[]
+  resolved: Record<string, number>
+  skipped: Record<string, boolean>
   suggestions: VisionSuggestion[]
   error: string | null
   progress: number
@@ -32,106 +31,18 @@ interface VisionState {
   rejectSuggestion: (id: string) => void
   acceptAll: () => void
   rejectAll: () => void
+  resolveConflict: (field: string, candidateIndex: number) => void
+  resolveConflictDefault: (field: string) => void
+  skipConflict: (field: string) => void
   reset: () => void
 }
 
-const FIELD_LABELS: Record<string, string> = {
-  characterType: '角色类型',
-  species: '物种',
-  bodyType: '体型',
-  anatomy: '解剖特征',
-  fur: '毛发',
-  appearance: '外观配色',
-  style: '风格',
-  gender: '性别',
-  heightCm: '身高',
-  name: '角色名称',
-  description: '描述',
-  userNotes: '用户备注',
-  visionAnalysis: '分析来源'
-}
-
-const ENUM_LABELS: Record<string, Record<string, string>> = {
-  characterType: {
-    human: '人类',
-    'anime-human': '二次元人类',
-    anthro: '兽人 / Furry',
-    animal: '动物',
-    'fantasy-creature': '奇幻生物',
-    robot: '机器人',
-    alien: '外星生物',
-    custom: '自定义生物'
-  },
-  style: { stylized: '风格化', realistic: '写实', anime: '二次元', pixel: '像素' },
-  gender: { female: '女', male: '男', neutral: '中性' },
-  bodyType: {
-    humanoid: '人类直立',
-    'biped-anthro': '兽人直立',
-    quadruped: '四足',
-    bird: '鸟类',
-    dragon: '龙形',
-    custom: '自定义'
-  },
-  species: {
-    wolf: '狼',
-    fox: '狐',
-    cat: '猫',
-    dog: '狗',
-    bear: '熊',
-    rabbit: '兔',
-    deer: '鹿',
-    dragon: '龙',
-    bird: '鸟',
-    reptile: '爬行类',
-    aquatic: '水生',
-    insect: '昆虫',
-    custom: '自定义'
-  },
-  fur: { none: '无', toon: 'Toon', anime: '动漫', stylized: '风格化', realistic: '写实' }
-}
-
-function labelOf(field: string, value: unknown): string {
-  if (typeof value === 'string') {
-    return ENUM_LABELS[field]?.[value] ?? value
-  }
-  if (field === 'heightCm' && typeof value === 'number') return `${value} cm`
-  return JSON.stringify(value) ?? '—'
-}
-
-function suggestionForField(field: string, patch: ConfirmedSpecPatch, confidence: number): VisionSuggestion {
-  let valueLabel = '—'
-  if (field === 'species' && patch.species?.primary) valueLabel = labelOf('species', patch.species.primary)
-  else if (field === 'anatomy' && patch.anatomy) {
-    const flags = Object.entries(patch.anatomy)
-      .filter(([, v]) => v === true)
-      .map(([k]) => k)
-    valueLabel = flags.length > 0 ? `${flags.length} 项特征` : '解剖结构'
-  } else if (field === 'fur' && patch.fur) {
-    valueLabel = patch.fur.style ? `毛发：${labelOf('fur', patch.fur.style)}` : '毛发'
-  } else if (field === 'appearance' && patch.appearance) {
-    const palette = patch.appearance.palette?.length ?? 0
-    valueLabel = palette > 0 ? `${palette} 种配色` : patch.appearance.baseColor ?? '外观'
-  } else {
-    const raw = patch[field as keyof ConfirmedSpecPatch]
-    valueLabel = labelOf(field, raw as unknown)
-  }
-  return {
-    id: `sug_${field}_${Date.now().toString(36)}`,
-    field,
-    fieldLabel: FIELD_LABELS[field] ?? field,
-    valueLabel,
-    confidence,
-    status: 'pending',
-    patch: { [field]: patch[field as keyof ConfirmedSpecPatch] } as ConfirmedSpecPatch
-  }
-}
-
-function buildSuggestions(result: VisionAnalysisResult): VisionSuggestion[] {
-  const patch = result.specPatch as ConfirmedSpecPatch
-  const fields = Object.keys(result.specPatch) as (keyof ConfirmedSpecPatch)[]
-  return fields
-    .filter((f) => patch[f] !== undefined)
-    .map((f) => suggestionForField(f as string, patch, result.confidence))
+function rebuildSuggestions(
+  result: VisionAnalysisResult,
+  resolved: Record<string, number>,
+  skipped: Record<string, boolean>
+): VisionSuggestion[] {
+  return buildReviewSuggestions(result.specPatch, result.conflicts ?? [], resolved, skipped, result.confidence)
 }
 
 export const useVisionStore = create<VisionState>((set, get) => ({
@@ -139,6 +50,10 @@ export const useVisionStore = create<VisionState>((set, get) => ({
   providerId: null,
   sourceImageIds: [],
   result: null,
+  viewAnalyses: [],
+  conflicts: [],
+  resolved: {},
+  skipped: {},
   suggestions: [],
   error: null,
   progress: 0,
@@ -154,14 +69,24 @@ export const useVisionStore = create<VisionState>((set, get) => ({
       providerId,
       sourceImageIds: refs.map((r) => r.imageId),
       result: null,
+      viewAnalyses: [],
+      conflicts: [],
+      resolved: {},
+      skipped: {},
       suggestions: [],
       error: null,
       progress: 0
     })
     try {
       const result = await provider.analyze(refs, (p) => set({ progress: p }))
-      const suggestions = buildSuggestions(result)
-      set({ status: 'success', result, suggestions, progress: 1 })
+      set({
+        status: 'success',
+        result,
+        viewAnalyses: result.perView ?? [],
+        conflicts: result.conflicts ?? [],
+        progress: 1,
+        suggestions: rebuildSuggestions(result, {}, {})
+      })
     } catch (err) {
       set({ status: 'error', error: err instanceof Error ? err.message : String(err), progress: 0 })
     }
@@ -197,6 +122,9 @@ export const useVisionStore = create<VisionState>((set, get) => ({
 
   acceptAll: () => {
     const pending = get().suggestions.filter((s) => s.status === 'pending')
+    // Unresolved/skipped conflicts are never in the suggestion set, so acceptAll
+    // can only ever write unifiedPatch + resolved overrides - and always through
+    // applyVisionResult.
     pending.forEach((s) => get().acceptSuggestion(s.id))
   },
 
@@ -208,12 +136,49 @@ export const useVisionStore = create<VisionState>((set, get) => ({
     })
   },
 
+  resolveConflict: (field, candidateIndex) => {
+    const { conflicts, resolved, skipped, result } = get()
+    if (!result) return
+    const next = applyConflictDecision(conflicts, resolved, skipped, field, { kind: 'candidate', index: candidateIndex })
+    set({
+      resolved: next.resolved,
+      skipped: next.skipped,
+      suggestions: rebuildSuggestions(result, next.resolved, next.skipped)
+    })
+  },
+
+  resolveConflictDefault: (field) => {
+    const { conflicts, resolved, skipped, result } = get()
+    if (!result) return
+    const next = applyConflictDecision(conflicts, resolved, skipped, field, { kind: 'default' })
+    set({
+      resolved: next.resolved,
+      skipped: next.skipped,
+      suggestions: rebuildSuggestions(result, next.resolved, next.skipped)
+    })
+  },
+
+  skipConflict: (field) => {
+    const { conflicts, resolved, skipped, result } = get()
+    if (!result) return
+    const next = applyConflictDecision(conflicts, resolved, skipped, field, { kind: 'skip' })
+    set({
+      resolved: next.resolved,
+      skipped: next.skipped,
+      suggestions: rebuildSuggestions(result, next.resolved, next.skipped)
+    })
+  },
+
   reset: () =>
     set({
       status: 'idle',
       providerId: null,
       sourceImageIds: [],
       result: null,
+      viewAnalyses: [],
+      conflicts: [],
+      resolved: {},
+      skipped: {},
       suggestions: [],
       error: null,
       progress: 0

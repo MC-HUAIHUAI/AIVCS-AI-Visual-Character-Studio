@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": false,
+    "declaration": false,
+    "sourceMap": false,
+    "baseUrl": "..",
+    "paths": {
+      "@shared/*": ["src/shared/*"]
+    },
+    "outDir": "../.review-test",
+    "rootDir": "../src"
+  },
+  "include": [
+    "../src/renderer/src/core/spec/visionReviewLogic.ts",
+    "../src/renderer/src/core/spec/applyVisionResult.ts"
+  ]
+}
