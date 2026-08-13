@@ -2,7 +2,7 @@
 
 面向 Windows 的 AI 虚拟主播（VTuber / 虚拟形象）制作软件。
 
-当前版本：**0.2.0（Phase 2.1 完成）**
+当前版本：**0.2.1（Phase 2.2 完成）**
 
 ## 技术栈
 
@@ -75,7 +75,17 @@ npm run dev
 - **真实 Kimi Vision**：`backend/app/providers/vision/kimi.py` 接入 Moonshot Kimi（模型 `kimi-k2.6`），OpenAI 兼容 `/chat/completions` + `image_url`（data URL）+ `response_format: json_object`；输出经 `vision_spec_mapper` 归一（枚举白名单、未知→custom、物种不确定→confidence null、palette 仅 `#RRGGBB`）
 - **安全边界**：`sourceImageIds` 由服务端从请求生成（不信任模型）；`AIVCS_KIMI_API_KEY` 仅后端环境变量 / `backend/.env`，前端/项目文件/IPC 零接触；未配置 Key 时自动回退 Mock，后端照常启动
 - **错误处理**：401/403、429、5xx、超时、响应非 JSON、无 choices、空内容均映射为用户安全的中文提示（502/503），UI 不崩溃
-- **schema 一致性**：`npm run check:schema` 校验 TS ↔ Pydantic 7 组模型字段一致
+- **schema 一致性**：`npm run check:schema` 校验 TS ↔ Pydantic 11 组模型字段一致
+
+## 已实现功能（Phase 2.2 — 多视角 Vision + Cross-view 一致性 + 冲突解决）
+
+- **多视角联合分析（Joint）**：最多 4 张参考图（front/side/back/custom）在一次 Kimi 请求中发送，每张带视角标签；`analysisMode='joint'` 为默认，`per-view` 仅 schema 预留、未实现逐图请求（router 显式拒绝）
+- **CrossViewResolver**（`backend/app/services/cross_view_resolver.py`）：确定性、无 LLM、无网络；统一结果与冲突检测的唯一事实来源；枚举/布尔/数值（身高容差）冲突规则、缺失≠false、逐视角归一后合并；11 项单测
+- **每视角分析（perView）**：模型输出逐视角观察 → `vision_spec_mapper` 逐视角归一（非法项丢弃）→ resolver 合并；`sourceImageIds` 由服务端按 `request.references` 重绑定，不信任模型
+- **冲突 Review / Resolve UI**：`ConflictResolveList` 展示冲突候选（视角/值/置信度）、采用候选 / 采用默认 / 跳过；未解决或跳过的冲突**绝不写入 CharacterSpec**；解决后进入普通 Review 建议（`applyVisionResult` 是唯一写入入口）
+- **多视角前端**：`VisionAnalysisPanel` 显示已选参考图与视角标签（可切换），展示顺序=冲突待解决→普通 AI 建议→每视角摘要；`perView` 缺失时显示"模型未提供逐视角分析"且不伪造
+- **缺失视角提示**：仅 front / front+side 时给出 UI 警告（不进 CharacterSpec）
+- **测试**：`npm run test:backend`（20）+ `npm run test:frontend`（19，纯逻辑，无新依赖）
 
 ## Mock 功能（模拟，非真实实现）
 
@@ -89,7 +99,6 @@ npm run dev
 - 真实 Image-to-3D（`RealImage3DProviderPlaceholder` 已占位，抛"未实现"）
 - 真实骨骼生成与蒙皮绑定（RigProfile 数据已就绪）
 - 真实毛发（贴图/法线/材质、Hair cards、Groom curves）
-- 多视角一致性分析（正面/侧面/背面合并；API 数据结构已支持多图，待实现）
 - VRM 导出（非人类结构作为 Extra Bones 的规则已定义）
 - Live2D 导出 / 完整 Live2D 支持
 - 动画、物理、VTuber 面部/动作追踪
@@ -117,11 +126,17 @@ npm run dev
 - 生成模型为运行时内存缓存，不随项目文件持久化；重新打开项目后需重新生成。
 - Phase 1 刻意不接入任何付费 AI API，API Key 零硬编码。
 
-## Kimi Vision 接入说明（Phase 2.1）
+## Kimi Vision 接入说明（Phase 2.1 / 2.2）
 
-- 配置：在 `backend/.env`（git 忽略，模板见 `backend/.env.example`）填入 `AIVCS_KIMI_API_KEY`；可选 `AIVCS_KIMI_BASE_URL`（默认 `https://api.moonshot.cn/v1`）、`AIVCS_KIMI_MODEL`（默认 `kimi-k2.6`）、`AIVCS_KIMI_TIMEOUT_SECONDS`（默认 120）。
+- 配置：在 `backend/.env`（git 忽略，模板见 `backend/.env.example`）填入 `AIVCS_KIMI_API_KEY`；可选 `AIVCS_KIMI_BASE_URL`（默认 `https://api.moonshot.cn/v1`）、`AIVCS_KIMI_MODEL`（默认 `kimi-k2.6`）、`AIVCS_KIMI_TIMEOUT_SECONDS`（默认 240）。
 - 未配置 Key 时：Vision 后端自动回退 Mock，`provider='kimi'` 返回 503；`provider='auto'` 有 Key 走 Kimi、无 Key 走 Mock。前端无需感知。
-- **官方能力确认**：`kimi-k2.6` 原生支持图片输入（`content` 数组 + `image_url`，data URL），并支持 `response_format: {"type": "json_object"}`。
-- **temperature 限制**：该模型只允许 `temperature=1`（其余值返回 HTTP 400 `invalid temperature: only 1 is allowed for this model`），因此本实现不发送 temperature 参数。
-- **限速与延迟现象（实测）**：当前账号组织级 `RPM = 3`（每分钟最多 3 次请求），超出返回 429。真实图片分析单次耗时约 **30–85 秒**（含图片编码与推理）。因此批量测试需以 ≥25 秒间隔逐步调用；如需更高吞吐请在 Moonshot 平台提升 RPM。
-- 测试结果（6 张像素风测试图）：人类/兽人狐/猫/龙/机器人均正确识别类型/物种/体型并给出置信度；模糊图正确返回低置信度与"无法确定角色物种，请选择或补充参考图"警告，不做猜测。
+- **官方能力确认**：`kimi-k2.6` 原生支持图片输入（`content` 数组 + `image_url`，data URL，图片数量不限）、多图输入，并支持 `response_format: {"type": "json_object"}`（Vision 支持 JSON Mode）。
+- **temperature 限制**：`kimi-k2.6` 的 `temperature` 不可修改（思考 1.0 / 非思考 0.6），因此不发送 temperature 参数。
+- **thinking 关闭（关键修复）**：`kimi-k2.6` 思考默认开启，其 `reasoning_content` 与 `content` **共享 `max_tokens` 预算**；多视角请求思考过长时会把 `content` 挤空。因此请求显式发送 `"thinking": {"type": "disabled"}` 且 `max_tokens=8000`。修复后真实测试确认 `finish_reason=stop`、无 `reasoning_content`、`content` 非空。
+- **限速与延迟现象（实测）**：当前账号 **Tier0：concurrency=1、RPM=3**，超出返回 429。真实图片分析单次耗时约 **25–35 秒**。批量测试需以 ≥25 秒间隔逐步调用，严禁自动重试；如需更高吞吐请在 Moonshot 平台提升。
+- **真实 Smoke Test 结果（Phase 2.2-D，3 次请求）**：
+  - T1 front+side：200 / stop / 无 reasoning / content 非空。
+  - T2 front+side+back：200 / stop / content 非空；`perView=3`（views 与输入一致，服务端绑定 sourceImageIds）；resolver 检出 7 项冲突并给出统一 patch。
+  - T3 front+back：200 / stop / content 非空；`perView=2`；resolver 检出 5 项冲突（人物不同视角产生差异，鲁棒性正常处理）。
+- **已知限制：模型输出契约未稳定满足**——`perView[]` 在本次 2/2 返回，但早期（2.2-B.1）曾出现不返回 `perView` 的情况；`unified specPatch` 稳定。若 `perView` 缺失，管线走 Phase 2.2-C 的 fallback（不伪造、不崩溃），`conflicts` 使用后端 resolver 的真实返回。
+- 测试图（6 张像素风）：人类/兽人狐/猫/龙/机器人识别正确；模糊图正确返回低置信度与"无法确定角色物种"警告。
