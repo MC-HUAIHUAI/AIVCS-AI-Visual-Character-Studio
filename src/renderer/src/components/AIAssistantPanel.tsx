@@ -107,6 +107,7 @@ export default function AIAssistantPanel(): JSX.Element {
 
   const runGeneration = useGenerationStore((s) => s.runGeneration)
   const activeJobId = useGenerationStore((s) => s.activeJobId)
+  const cancelJob = useGenerationStore((s) => s.cancelJob)
   const running = activeJobId !== null
 
   const backendOnline = useUIStore((s) => s.backendOnline)
@@ -468,6 +469,15 @@ export default function AIAssistantPanel(): JSX.Element {
         >
           {running ? '生成中…' : '生成角色'}
         </button>
+        {running && (
+          <button
+            className="btn btn--block"
+            style={{ marginTop: 6, color: 'var(--danger)' }}
+            onClick={() => activeJobId && cancelJob(activeJobId)}
+          >
+            取消生成
+          </button>
+        )}
         <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 8, lineHeight: 1.5 }}>
           {selectedProvider.description}
         </div>

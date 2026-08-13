@@ -1,7 +1,15 @@
 import type { AIImage3DProvider, GeneratedModelResult, GenerationProgress } from './aiProvider'
-import type { CharacterSpec, ImageAsset } from '@shared/types'
+import type { GenerationAbortSignal } from './aiProvider'
+import type { CharacterSpec, ModelFormat } from '@shared/types'
+import type { VisionImageInput } from './visionProvider'
+import type { GenerationRequest, JobDto } from '../spec/generationLogic'
+import { isTerminal, safeErrorMessage } from '../spec/generationLogic'
 
 export const AIVCS_BACKEND_URL = 'http://127.0.0.1:8321'
+
+export const DEFAULT_GENERATION_TIMEOUT_SECONDS = 600
+
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
 export async function backendHealth(): Promise<boolean> {
   try {
@@ -12,80 +20,113 @@ export async function backendHealth(): Promise<boolean> {
   }
 }
 
-interface JobDto {
-  job_id: string
-  status: 'queued' | 'running' | 'done' | 'failed'
-  progress: number
-  message: string
-  steps: { index: number; label: string; status: string }[]
-  error: string | null
-  result: { model_id: string } | null
+export interface CreateGenerationRequest {
+  spec: CharacterSpec
+  references: GenerationRequest['references']
+  timeoutSeconds?: number
 }
 
-const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
+export async function createGenerationJob(req: CreateGenerationRequest): Promise<{ jobId: string }> {
+  const res = await fetch(`${AIVCS_BACKEND_URL}/api/v1/generate/image-to-3d`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      provider: 'mock',
+      spec: req.spec,
+      references: req.references,
+      timeoutSeconds: req.timeoutSeconds ?? DEFAULT_GENERATION_TIMEOUT_SECONDS
+    })
+  })
+  if (!res.ok) {
+    throw new Error(`无法创建生成任务（HTTP ${res.status}）。后端是否已启动？`)
+  }
+  const data = (await res.json()) as { jobId: string }
+  return { jobId: data.jobId }
+}
+
+export async function pollGenerationJob(jobId: string): Promise<JobDto> {
+  const res = await fetch(`${AIVCS_BACKEND_URL}/api/v1/generate/jobs/${jobId}`)
+  if (!res.ok) throw new Error(`轮询生成任务失败（HTTP ${res.status}）`)
+  return (await res.json()) as JobDto
+}
+
+export async function cancelGenerationJob(jobId: string): Promise<boolean> {
+  const res = await fetch(`${AIVCS_BACKEND_URL}/api/v1/generate/jobs/${jobId}/cancel`, {
+    method: 'POST'
+  })
+  if (!res.ok) throw new Error(`取消失败（HTTP ${res.status}）`)
+  const data = (await res.json()) as { cancelled: boolean }
+  return data.cancelled
+}
+
+export async function downloadModel(
+  modelId: string
+): Promise<{ bytes: ArrayBuffer; mime?: string; sizeBytes?: number }> {
+  const res = await fetch(`${AIVCS_BACKEND_URL}/api/v1/models/${modelId}`, {
+    signal: AbortSignal.timeout(30000)
+  })
+  if (!res.ok) throw new Error(`模型下载失败（HTTP ${res.status}）`)
+  const bytes = await res.arrayBuffer()
+  return { bytes, mime: res.headers.get('Content-Type') ?? undefined, sizeBytes: bytes.byteLength }
+}
 
 /**
- * Provider that drives the image-to-3D pipeline through the local FastAPI
- * backend. The backend holds its own provider abstraction (Mock + future real
- * providers); this client only translates HTTP into the same AIImage3DProvider
- * contract used by the local mock.
+ * Job-aware backend provider. The generationStore drives the full job lifecycle
+ * (create/poll/cancel/download) through generationApi; this class implements the
+ * AIImage3DProvider contract for direct/standalone use with signal support.
  */
 export class BackendImage3DProvider implements AIImage3DProvider {
   readonly id = 'backend-fastapi'
   readonly name = 'FastAPI 后端（Mock）'
-  readonly description = '通过本地 FastAPI 后端运行生成流程（使用其 Mock 提供方）。需要运行 `npm run backend`。'
+  readonly description =
+    '通过本地 FastAPI 后端运行生成任务（状态机 / 取消 / 超时 / 持久化模型）。需要运行 `npm run backend`。'
   readonly requiresBackend = true
 
   async generate(
     spec: CharacterSpec,
-    references: ImageAsset[],
-    onProgress: (p: GenerationProgress) => void
+    references: VisionImageInput[],
+    onProgress: (p: GenerationProgress) => void,
+    signal?: GenerationAbortSignal
   ): Promise<GeneratedModelResult> {
-    const createRes = await fetch(`${AIVCS_BACKEND_URL}/api/v1/generate/image-to-3d`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        provider: 'mock',
-        spec,
-        reference_image_ids: references.map((r) => r.id)
-      })
+    const created = await createGenerationJob({
+      spec,
+      references: references.map((r) => ({ imageId: r.imageId, dataUrl: r.dataUrl, view: r.view ?? null })),
+      timeoutSeconds: DEFAULT_GENERATION_TIMEOUT_SECONDS
     })
-    if (!createRes.ok) {
-      throw new Error(`Backend rejected generation (HTTP ${createRes.status}). Is the backend running?`)
-    }
-    const { job_id } = (await createRes.json()) as { job_id: string }
 
-    let job: JobDto
+    let dto: JobDto | null = null
     for (;;) {
-      const pollRes = await fetch(`${AIVCS_BACKEND_URL}/api/v1/generate/jobs/${job_id}`)
-      if (!pollRes.ok) throw new Error(`Failed to poll job (HTTP ${pollRes.status})`)
-      job = (await pollRes.json()) as JobDto
-
+      dto = await pollGenerationJob(created.jobId)
       onProgress({
-        step: job.steps.filter((s) => s.status === 'done' || s.status === 'running').length,
-        totalSteps: job.steps.length,
-        percent: job.progress,
-        message: job.message
+        step: dto.steps.filter((s) => s.status === 'done' || s.status === 'running').length,
+        totalSteps: dto.steps.length,
+        percent: dto.progress,
+        message: dto.message
       })
-
-      if (job.status === 'done') break
-      if (job.status === 'failed') throw new Error(job.error ?? 'Generation failed')
+      if (isTerminal(dto.status)) break
+      if (signal?.aborted) {
+        await cancelGenerationJob(created.jobId)
+        throw new Error('generation aborted')
+      }
       await sleep(450)
     }
 
-    if (!job.result?.model_id) throw new Error('Backend finished without a model id')
-
-    const glbRes = await fetch(`${AIVCS_BACKEND_URL}/api/v1/models/${job.result.model_id}`, {
-      signal: AbortSignal.timeout(15000)
-    })
-    if (!glbRes.ok) throw new Error(`Failed to download model (HTTP ${glbRes.status})`)
-    const bytes = await glbRes.arrayBuffer()
-
-    return {
-      modelId: job.result.model_id,
-      name: 'generated_character',
-      format: 'glb',
-      bytes
+    if (dto && dto.status === 'done' && dto.result?.model_id) {
+      const { bytes, mime, sizeBytes } = await downloadModel(dto.result.model_id)
+      return {
+        modelId: dto.result.model_id,
+        name: 'generated_character',
+        format: (dto.result.format ?? 'glb') as ModelFormat,
+        sizeBytes: dto.result.size_bytes ?? sizeBytes,
+        providerId: dto.result.provider_id,
+        sourceJobId: dto.result.source_job_id,
+        mime: dto.result.mime ?? mime,
+        bytes
+      }
     }
+    if (dto?.status === 'cancelled' || signal?.aborted) {
+      throw new Error('generation aborted')
+    }
+    throw new Error(safeErrorMessage(new Error(dto?.error ?? '生成失败')))
   }
 }

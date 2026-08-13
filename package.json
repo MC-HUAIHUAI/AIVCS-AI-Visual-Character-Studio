@@ -15,7 +15,7 @@
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "check:schema": "python tools/check_schema_consistency.py",
     "test:backend": "python -m unittest discover -s backend/tests -v",
-    "test:frontend": "tsc -p tools/tsconfig.review-test.json && node tools/test_vision_review_logic.mjs",
+    "test:frontend": "tsc -p tools/tsconfig.review-test.json && node tools/test_vision_review_logic.mjs && node tools/test_generation_logic.mjs",
     "gen:demo": "python tools/gen_demo_character.py",
     "backend": "python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8321 --reload",
     "backend:install": "python -m pip install -r backend/requirements.txt"

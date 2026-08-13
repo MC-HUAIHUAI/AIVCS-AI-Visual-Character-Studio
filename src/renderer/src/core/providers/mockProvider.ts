@@ -1,5 +1,7 @@
 import type { AIImage3DProvider, GeneratedModelResult, GenerationProgress } from './aiProvider'
-import type { BodyType, CharacterSpec, ImageAsset, RigProfileId } from '@shared/types'
+import type { GenerationAbortSignal } from './aiProvider'
+import type { BodyType, CharacterSpec, RigProfileId } from '@shared/types'
+import type { VisionImageInput } from './visionProvider'
 import { demoUrlForType, fetchBytes, isNonHuman } from '../demo/demoCharacter'
 import { getRigProfile } from '@shared/types'
 
@@ -25,10 +27,6 @@ const RIG_FOR_BODY_TYPE: Record<BodyType, RigProfileId> = {
   custom: 'custom'
 }
 
-/**
- * Builds the mock pipeline steps based on the character's type/fur/rig so the
- * progress panel reflects the actual character being generated.
- */
 function buildSteps(spec: CharacterSpec): string[] {
   const steps: string[] = ['解析角色规格（' + (CHARACTER_TYPE_LABEL[spec.characterType] ?? spec.characterType) + '）']
   if (isNonHuman(spec.characterType)) {
@@ -52,13 +50,8 @@ function buildSteps(spec: CharacterSpec): string[] {
 
 /**
  * Fully local mock provider. Replays the image-to-3D pipeline with simulated
- * progress and returns a demo GLB matching the character's type (human chibi
- * vs anthro fox). Requires no network and no AI API, keeping Demo Mode working
- * out of the box.
- *
- * NOTE: this is a mock. It does not actually synthesize geometry from the
- * reference images; the output is always one of the bundled demo characters so
- * the app can be exercised end-to-end.
+ * progress and returns a demo GLB matching the character's type (human chibi vs
+ * anthro fox). Requires no network and no AI API.
  */
 export class MockImage3DProvider implements AIImage3DProvider {
   readonly id = 'mock-local'
@@ -69,21 +62,23 @@ export class MockImage3DProvider implements AIImage3DProvider {
 
   async generate(
     spec: CharacterSpec,
-    references: ImageAsset[],
-    onProgress: (p: GenerationProgress) => void
+    references: VisionImageInput[],
+    onProgress: (p: GenerationProgress) => void,
+    signal?: GenerationAbortSignal
   ): Promise<GeneratedModelResult> {
     const steps = buildSteps(spec)
     const total = steps.length
 
     for (let i = 0; i < total; i++) {
+      if (signal?.aborted) throw new Error('generation aborted')
       let message = steps[i]
       if (steps[i].includes('物种') && spec.species?.confidence == null && references.length === 0) {
         message = '无法确定角色物种，请选择或补充参考图。继续使用当前设定生成。'
       }
       onProgress({ step: i, totalSteps: total, percent: i / total, message })
-      // Longer on the "topology" step to feel like real work is happening.
-      await sleep(i === 2 ? 1400 : 520)
+      await sleep(i === 2 ? 900 : 380)
     }
+    if (signal?.aborted) throw new Error('generation aborted')
     onProgress({ step: total, totalSteps: total, percent: 1, message: '生成完成' })
 
     const bytes = await fetchBytes(demoUrlForType(spec.characterType))
@@ -92,6 +87,10 @@ export class MockImage3DProvider implements AIImage3DProvider {
       modelId: `model_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
       name: spec.characterType === 'human' || spec.characterType === 'anime-human' ? 'generated_character' : 'generated_creature',
       format: 'glb',
+      sizeBytes: bytes.byteLength,
+      providerId: this.id,
+      sourceJobId: `mock_${Date.now().toString(36)}`,
+      mime: 'model/gltf-binary',
       bytes
     }
   }

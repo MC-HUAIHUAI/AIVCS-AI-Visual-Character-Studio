@@ -1,4 +1,10 @@
-import type { CharacterSpec, ImageAsset, ModelFormat } from '@shared/types'
+import type { CharacterSpec, ModelFormat } from '@shared/types'
+import type { VisionImageInput } from './visionProvider'
+
+/** Cooperative cancellation flag for a running generation job. */
+export interface GenerationAbortSignal {
+  aborted: boolean
+}
 
 /**
  * Result of an AI image-to-3D generation run.
@@ -11,6 +17,11 @@ export interface GeneratedModelResult {
   bytes: ArrayBuffer
   /** Optional absolute path when the provider stored the file itself. */
   filePath?: string
+  /** Phase 2.3-C output metadata (optional). */
+  sizeBytes?: number
+  providerId?: string
+  sourceJobId?: string
+  mime?: string
 }
 
 export interface GenerationProgress {
@@ -36,7 +47,8 @@ export interface AIImage3DProvider {
   readonly requiresBackend: boolean
   generate(
     spec: CharacterSpec,
-    references: ImageAsset[],
-    onProgress: (p: GenerationProgress) => void
+    references: VisionImageInput[],
+    onProgress: (p: GenerationProgress) => void,
+    signal?: GenerationAbortSignal
   ): Promise<GeneratedModelResult>
 }

@@ -364,6 +364,11 @@ export interface ModelAsset {
   /** Absolute path on disk when available, otherwise null for demo/builtin. */
   filePath: string | null
   addedAt: string
+  /** Phase 2.3-C output metadata (optional, from the job result - never guessed). */
+  providerId?: string
+  sourceJobId?: string
+  sizeBytes?: number
+  mime?: string
 }
 
 export interface ProjectData {
