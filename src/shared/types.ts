@@ -280,6 +280,19 @@ export interface CharacterEditCommand {
 export type ReferenceView = 'front' | 'side' | 'back' | 'custom'
 
 /**
+ * How multiple reference images are analyzed. Phase 2.2 only implements
+ * 'joint' (one request with all views); 'per-view' is reserved for the future.
+ */
+export type AnalysisMode = 'joint' | 'per-view'
+
+/** Per-view provenance metadata stored on an accepted CharacterSpec. */
+export interface VisionPerViewMeta {
+  view: ReferenceView
+  sourceImageId: string
+  confidence: number
+}
+
+/**
  * Provenance metadata attached to a CharacterSpec once a vision analysis
  * suggestion has been accepted by the user.
  */
@@ -288,6 +301,46 @@ export interface VisionAnalysisMeta {
   analyzedAt: string
   sourceImageIds: string[]
   confidence: number
+  /** Optional per-view metadata (Phase 2.2, accepted spec only). */
+  perView?: VisionPerViewMeta[]
+  resolvedAt?: string
+}
+
+/* ------------------------------------------------------------------------ */
+/* Multi-view analysis (Phase 2.2)                                           */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * A single view's observation produced by a vision provider. It is an
+ * observation only - the final unified result and conflict detection are owned
+ * by the CrossViewResolver, never by the provider.
+ */
+export interface ViewAnalysis {
+  view: ReferenceView
+  sourceImageId: string
+  specPatch: Partial<CharacterSpec>
+  /** Overall confidence of this view's analysis (0..1). */
+  confidence: number
+  notes: string[]
+  warnings: string[]
+}
+
+export interface ViewConflictCandidate {
+  value: unknown
+  view: ReferenceView | null
+  confidence: number
+}
+
+/**
+ * A field where two or more views disagreed. `resolvedTo` holds the
+ * deterministic default (highest-confidence candidate) and is meant for
+ * runtime/UI; unresolved conflicts are never persisted into CharacterSpec.
+ */
+export interface ViewConflict {
+  field: string
+  fieldLabel: string
+  candidates: ViewConflictCandidate[]
+  resolvedTo: ViewConflictCandidate | null
 }
 
 export interface ImageAsset {

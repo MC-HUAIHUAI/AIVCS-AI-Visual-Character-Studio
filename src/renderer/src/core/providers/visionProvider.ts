@@ -1,5 +1,6 @@
 import type { CharacterSpec } from '@shared/types'
 import type { ReferenceView } from '@shared/types'
+import type { ViewAnalysis, ViewConflict } from '@shared/types'
 
 export type { ReferenceView } from '@shared/types'
 
@@ -17,6 +18,11 @@ export interface VisionImageInput {
  * Result of a vision analysis run. `specPatch` holds the AI *suggestions* only;
  * it must never be written to the CharacterSpec directly - the user reviews and
  * confirms each suggestion first.
+ *
+ * Phase 2.2 additions (all optional, Phase 2.1 single-image results remain
+ * fully compatible): `perView` carries each view's own observation and
+ * `conflicts` lists fields where views disagreed. `conflicts` MUST come from
+ * the backend CrossViewResolver, never be trusted from the model.
  */
 export interface VisionAnalysisResult {
   specPatch: Partial<CharacterSpec>
@@ -26,6 +32,8 @@ export interface VisionAnalysisResult {
   warnings: string[]
   sourceImageIds: string[]
   providerId?: string
+  perView?: ViewAnalysis[]
+  conflicts?: ViewConflict[]
 }
 
 /**

@@ -32,6 +32,10 @@ MODEL_PAIRS = [
     ("AnatomyGraph", "backend.app.schemas.character", "AnatomyGraph"),
     ("VisionImageInput", "backend.app.schemas.vision", "VisionImageInput"),
     ("VisionAnalysisResult", "backend.app.schemas.vision", "VisionAnalysisResponse"),
+    ("VisionAnalysisMeta", "backend.app.schemas.vision", "VisionAnalysisMeta"),
+    ("VisionPerViewMeta", "backend.app.schemas.vision", "VisionPerViewMeta"),
+    ("ViewAnalysis", "backend.app.schemas.vision", "ViewAnalysis"),
+    ("ViewConflict", "backend.app.schemas.vision", "ViewConflict"),
 ]
 
 

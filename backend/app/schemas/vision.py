@@ -49,6 +49,8 @@ class VisionImageInput(_CamelModel):
 class VisionRequest(_CamelModel):
     provider: str = "auto"
     references: list[VisionImageInput] = Field(min_length=1)
+    # Phase 2.2: 'joint' sends all views in one request. 'per-view' is reserved.
+    analysis_mode: Literal["joint", "per-view"] = Field(default="joint", alias="analysisMode")
 
 
 class VisionSpeciesPatch(_CamelModel):
@@ -96,11 +98,47 @@ class VisionAppearancePatch(_CamelModel):
     palette: list[str] | None = None
 
 
+class VisionPerViewMeta(_CamelModel):
+    view: ReferenceView
+    source_image_id: str = Field(alias="sourceImageId")
+    confidence: float
+
+
 class VisionAnalysisMeta(_CamelModel):
     provider_id: str = Field(alias="providerId")
     analyzed_at: str = Field(alias="analyzedAt")
     source_image_ids: list[str] = Field(alias="sourceImageIds")
     confidence: float
+    per_view: list[VisionPerViewMeta] | None = Field(default=None, alias="perView")
+    resolved_at: str | None = Field(default=None, alias="resolvedAt")
+
+
+class ViewAnalysis(_CamelModel):
+    """A single view's observation produced by a vision provider.
+
+    It is an observation only - the unified result and conflict detection are
+    owned by the CrossViewResolver, never by the provider.
+    """
+
+    view: ReferenceView
+    source_image_id: str = Field(alias="sourceImageId")
+    spec_patch: dict = Field(alias="specPatch")
+    confidence: float = Field(ge=0.0, le=1.0)
+    notes: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class ViewConflictCandidate(_CamelModel):
+    value: object | None = None
+    view: ReferenceView | None = None
+    confidence: float = 0.0
+
+
+class ViewConflict(_CamelModel):
+    field: str
+    field_label: str = Field(alias="fieldLabel")
+    candidates: list[ViewConflictCandidate] = Field(default_factory=list)
+    resolved_to: ViewConflictCandidate | None = Field(default=None, alias="resolvedTo")
 
 
 class VisionSpecPatch(_CamelModel):
@@ -137,3 +175,7 @@ class VisionAnalysisResponse(_CamelModel):
     warnings: list[str] = Field(default_factory=list)
     source_image_ids: list[str] = Field(alias="sourceImageIds")
     provider_id: str = Field(alias="providerId")
+    # Phase 2.2 (optional, backward compatible). conflicts MUST be produced by
+    # the CrossViewResolver, never taken from the model.
+    per_view: list[ViewAnalysis] | None = Field(default=None, alias="perView")
+    conflicts: list[ViewConflict] | None = Field(default=None, alias="conflicts")
