@@ -52,6 +52,13 @@ class VisionRequest(_CamelModel):
     # Phase 2.2: 'joint' sends all views in one request. 'per-view' is reserved.
     analysis_mode: Literal["joint", "per-view"] = Field(default="joint", alias="analysisMode")
 
+    @field_validator("references")
+    @classmethod
+    def references_within_limit(cls, v: list[VisionImageInput]) -> list[VisionImageInput]:
+        if len(v) > 4:
+            raise ValueError("一次最多支持 4 张参考图（front/side/back/custom）")
+        return v
+
 
 class VisionSpeciesPatch(_CamelModel):
     primary: str | None = None

@@ -1,8 +1,9 @@
-"""Mock vision provider.
+"""Mock vision provider (multi-view aware).
 
-Deliberately does not analyze the image content: it returns a deterministic,
+Deliberately does not analyze image content: it returns a deterministic,
 honest result flagged as mock so the whole pipeline is testable without any AI
-API. Source image ids always come from the actual inputs, never hardcoded.
+API. Every per-view entry is built from the actual request references (view and
+image id) - never hardcoded.
 """
 
 from __future__ import annotations
@@ -30,8 +31,21 @@ class MockVisionProvider(AIVisionProvider):
         await asyncio.sleep(0.15)
         on_progress(1.0)
 
+        per_view = [
+            {
+                "view": item.view if item.view else "front",
+                "source_image_id": item.image_id,
+                "spec_patch": {"characterType": "human"},
+                "confidence": 0.1,
+                "notes": ["Mock 模式：未真正分析图片"],
+                "warnings": ["无法确定角色物种，请选择或补充参考图。"],
+            }
+            for item in inputs
+        ]
+
         return {
             "spec_patch": {"character_type": "human"},
+            "per_view": per_view,
             "confidence": 0.1,
             "notes": ["Mock 模式：未真正分析图片"],
             "warnings": ["无法确定角色物种，请选择或补充参考图。"],

@@ -41,7 +41,7 @@ CORS_ORIGINS = [origin.strip() for origin in os.environ.get("AIVCS_CORS_ORIGINS"
 KIMI_API_KEY = os.environ.get("AIVCS_KIMI_API_KEY", "")
 KIMI_BASE_URL = os.environ.get("AIVCS_KIMI_BASE_URL", "https://api.moonshot.cn/v1")
 KIMI_MODEL = os.environ.get("AIVCS_KIMI_MODEL", "kimi-k2.6")
-KIMI_TIMEOUT_SECONDS = float(os.environ.get("AIVCS_KIMI_TIMEOUT_SECONDS", "120"))
+KIMI_TIMEOUT_SECONDS = float(os.environ.get("AIVCS_KIMI_TIMEOUT_SECONDS", "240"))
 
 BACKEND_NAME = "aivcs-backend"
 BACKEND_VERSION = "0.1.0"

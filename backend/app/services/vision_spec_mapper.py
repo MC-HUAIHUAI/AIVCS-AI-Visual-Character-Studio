@@ -3,16 +3,20 @@
 Safety boundary between "whatever a vision provider returns" and the
 CharacterSpec patch the client is allowed to see. Unknown / illegal values are
 clamped to the canonical enums or dropped - never guessed. This keeps the
-boundary: raw AI output -> parse/validate -> mapper -> spec patch.
+boundary: raw AI output -> parse/validate -> mapper -> CrossViewResolver ->
+spec patch. Per-view observations (perView[]) are normalized through the exact
+same path as the unified patch - there is no second validation system.
 """
 
 from __future__ import annotations
 
 import re
 
-from ..schemas.vision import VisionAnalysisResponse
+from ..schemas.vision import ViewAnalysis, VisionAnalysisResponse, VisionSpecPatch
 
 _HEX_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+VIEWS = ("front", "side", "back", "custom")
 
 CHARACTER_TYPES = {"human", "anime-human", "anthro", "animal", "fantasy-creature", "robot", "alien", "custom"}
 CHARACTER_STYLES = {"stylized", "realistic", "anime", "pixel"}
@@ -95,15 +99,12 @@ def _convert_keys(value):
     return value
 
 
-def normalize(provider_result: dict) -> VisionAnalysisResponse:
-    raw = provider_result or {}
-    patch = _convert_keys(raw.get("spec_patch") or {})
-    notes = _str_list(raw.get("notes")) or []
-    warnings = _str_list(raw.get("warnings")) or []
-    confidence = _clamp_float(raw.get("confidence"), 0.0, 1.0)
-    source_ids = _str_list(raw.get("source_image_ids")) or []
-    provider_id = raw.get("provider_id") if isinstance(raw.get("provider_id"), str) else "mock"
+def normalize_spec_patch(raw_patch) -> dict:
+    """Clamp/validate a raw spec patch into a safe camelCase dict.
 
+    Reused for both the unified patch and every per-view patch.
+    """
+    patch = _convert_keys(raw_patch if isinstance(raw_patch, dict) else {})
     spec: dict = {}
 
     for key in ("name", "description", "userNotes"):
@@ -214,11 +215,65 @@ def normalize(provider_result: dict) -> VisionAnalysisResponse:
                 "confidence": _clamp_float(vision_analysis.get("confidence"), 0.0, 1.0),
             }
 
+    return spec
+
+
+def normalize_view(item) -> ViewAnalysis | None:
+    """Normalize a single per-view observation into a validated ViewAnalysis.
+
+    Returns None for non-dict entries, unknown views, or missing source ids so
+    the caller can safely drop illegal items.
+    """
+    if not isinstance(item, dict):
+        return None
+    view = item.get("view")
+    if view not in VIEWS:
+        return None
+    source = item.get("source_image_id") or item.get("sourceImageId")
+    if not isinstance(source, str) or not source:
+        return None
+    patch = normalize_spec_patch(item.get("spec_patch") or item.get("specPatch") or {})
+    confidence = _clamp_float(item.get("confidence"), 0.0, 1.0)
+    notes = _str_list(item.get("notes")) or []
+    warnings = _str_list(item.get("warnings")) or []
+    return ViewAnalysis(
+        view=view,
+        sourceImageId=source,
+        specPatch=patch,
+        confidence=confidence,
+        notes=notes,
+        warnings=warnings,
+    )
+
+
+def validate_spec_patch_dict(unified: dict) -> VisionSpecPatch:
+    """Re-validate a CrossViewResolver unified patch into the response model."""
+    return VisionSpecPatch.model_validate(unified)
+
+
+def normalize(provider_result: dict) -> VisionAnalysisResponse:
+    raw = provider_result or {}
+    spec_patch = normalize_spec_patch(raw.get("spec_patch") or {})
+    notes = _str_list(raw.get("notes")) or []
+    warnings = _str_list(raw.get("warnings")) or []
+    confidence = _clamp_float(raw.get("confidence"), 0.0, 1.0)
+    source_ids = _str_list(raw.get("source_image_ids")) or []
+    provider_id = raw.get("provider_id") if isinstance(raw.get("provider_id"), str) else "mock"
+
+    per_view = None
+    raw_per_view = raw.get("per_view")
+    if isinstance(raw_per_view, list):
+        items = [normalize_view(item) for item in raw_per_view]
+        items = [item for item in items if item is not None]
+        if items:
+            per_view = items
+
     return VisionAnalysisResponse(
-        specPatch=spec,
+        specPatch=spec_patch,
         confidence=confidence,
         notes=notes,
         warnings=warnings,
         sourceImageIds=source_ids,
         providerId=provider_id,
+        perView=per_view,
     )
