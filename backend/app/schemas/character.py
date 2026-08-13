@@ -6,6 +6,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .vision import VisionAnalysisMeta
+
 CharacterStyle = Literal["stylized", "realistic", "anime", "pixel"]
 CharacterGender = Literal["female", "male", "neutral"]
 JobStatus = Literal["queued", "running", "done", "failed"]
@@ -35,6 +37,7 @@ class AppearanceProfile(_CamelModel):
     secondary_colors: list[str] = Field(default_factory=list, alias="secondaryColors")
     patterns: list[str] = Field(default_factory=list)
     markings: list[str] = Field(default_factory=list)
+    palette: list[str] = Field(default_factory=list)
 
 
 class AnatomyGraph(_CamelModel):
@@ -78,6 +81,10 @@ class CharacterSpec(_CamelModel):
     anatomy: AnatomyGraph = Field(default_factory=AnatomyGraph)
     fur: FurProfile = Field(default_factory=FurProfile)
     appearance: AppearanceProfile = Field(default_factory=AppearanceProfile)
+
+    # Phase 2.1 - vision provenance (optional, backward compatible).
+    user_notes: str | None = Field(default=None, alias="userNotes")
+    vision_analysis: VisionAnalysisMeta | None = Field(default=None, alias="visionAnalysis")
 
 
 class GenerateRequest(_CamelModel):

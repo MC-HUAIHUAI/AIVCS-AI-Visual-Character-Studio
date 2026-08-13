@@ -69,6 +69,8 @@ export interface AppearanceProfile {
   secondaryColors: string[]
   patterns: string[]
   markings: string[]
+  /** Extracted color palette in #RRGGBB format (Phase 2.1 vision output). */
+  palette?: string[]
 }
 
 export type TailMode = 'none' | 'single' | 'multiple'
@@ -124,6 +126,10 @@ export interface CharacterSpec {
   anatomy: AnatomyGraph
   fur: FurProfile
   appearance: AppearanceProfile
+
+  /** New in Phase 2.1 - vision analysis provenance (written on user acceptance). */
+  visionAnalysis?: VisionAnalysisMeta
+  userNotes?: string
 }
 
 /* ------------------------------------------------------------------------ */
@@ -266,6 +272,24 @@ export interface CharacterEditCommand {
   createdAt: string
 }
 
+/* ------------------------------------------------------------------------ */
+/* Vision analysis (Phase 2.1)                                               */
+/* ------------------------------------------------------------------------ */
+
+/** Camera/pose view of a reference image. */
+export type ReferenceView = 'front' | 'side' | 'back' | 'custom'
+
+/**
+ * Provenance metadata attached to a CharacterSpec once a vision analysis
+ * suggestion has been accepted by the user.
+ */
+export interface VisionAnalysisMeta {
+  providerId: string
+  analyzedAt: string
+  sourceImageIds: string[]
+  confidence: number
+}
+
 export interface ImageAsset {
   id: string
   name: string
@@ -275,6 +299,8 @@ export interface ImageAsset {
   dataUrl: string
   bytes: number
   addedAt: string
+  /** Optional reference view tag for multi-view analysis (Phase 2.1+). */
+  view?: ReferenceView | null
 }
 
 export interface ModelAsset {

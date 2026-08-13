@@ -13,6 +13,7 @@
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "check:schema": "python tools/check_schema_consistency.py",
     "gen:demo": "python tools/gen_demo_character.py",
     "backend": "python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8321 --reload",
     "backend:install": "python -m pip install -r backend/requirements.txt"

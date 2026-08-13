@@ -48,7 +48,7 @@ export function defaultFur(): FurProfile {
 }
 
 export function defaultAppearance(): AppearanceProfile {
-  return { baseColor: null, secondaryColors: [], patterns: [], markings: [] }
+  return { baseColor: null, secondaryColors: [], patterns: [], markings: [], palette: [] }
 }
 
 /**
@@ -73,7 +73,9 @@ export function normalizeSpec(spec: CharacterSpec): CharacterSpec {
     bodyType: spec.bodyType ?? 'humanoid',
     anatomy: { ...defaultAnatomy(), ...(spec.anatomy ?? {}) },
     fur: { ...defaultFur(), ...(spec.fur ?? {}) },
-    appearance: { ...defaultAppearance(), ...(spec.appearance ?? {}) }
+    appearance: { ...defaultAppearance(), ...(spec.appearance ?? {}) },
+    visionAnalysis: spec.visionAnalysis,
+    userNotes: spec.userNotes
   }
 }
 

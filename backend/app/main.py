@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import config
 from .routers.generate import router as generate_router
+from .routers.vision import router as vision_router
 
 app = FastAPI(
     title="AIVCS Backend",
@@ -19,6 +20,7 @@ app.add_middleware(
 )
 
 app.include_router(generate_router)
+app.include_router(vision_router)
 
 
 @app.get("/")

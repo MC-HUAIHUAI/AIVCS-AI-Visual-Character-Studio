@@ -5,6 +5,7 @@ import { useUIStore } from '../store/uiStore'
 import { providers } from '../core/providers/registry'
 import { editInterpreters } from '../core/providers/editInterpreter'
 import { getRigProfile, RIG_PROFILES } from '@shared/types'
+import VisionAnalysisPanel from './VisionAnalysisPanel'
 import type {
   AnatomyGraph,
   BodyType,
@@ -388,6 +389,8 @@ export default function AIAssistantPanel(): JSX.Element {
             </div>
           )}
         </div>
+
+        <VisionAnalysisPanel />
 
         <div className="spec-field">
           <label>自然语言编辑（Mock）</label>
