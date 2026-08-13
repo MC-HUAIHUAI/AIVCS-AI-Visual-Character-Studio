@@ -143,8 +143,12 @@ class KimiVisionProvider(AIVisionProvider):
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": content},
             ],
+            # kimi-k2.6 thinking defaults to enabled and its reasoning_content
+            # shares the max_tokens budget with content - which emptied content
+            # on multi-view requests. Disable thinking for structured vision.
+            "thinking": {"type": "disabled"},
             "response_format": {"type": "json_object"},
-            "max_tokens": 5000,
+            "max_tokens": 8000,
             "stream": False,
         }
 
