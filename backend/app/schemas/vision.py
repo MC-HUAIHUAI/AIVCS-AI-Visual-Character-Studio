@@ -47,7 +47,7 @@ class VisionImageInput(_CamelModel):
 
 
 class VisionRequest(_CamelModel):
-    provider: str = "mock"
+    provider: str = "auto"
     references: list[VisionImageInput] = Field(min_length=1)
 
 

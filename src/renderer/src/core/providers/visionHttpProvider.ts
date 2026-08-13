@@ -18,8 +18,9 @@ interface VisionAnalysisDto {
  */
 export class VisionHttpProvider implements AIVisionProvider {
   readonly id = 'backend-fastapi-vision'
-  readonly displayName = 'FastAPI 后端（Mock）'
-  readonly description = '通过本地 FastAPI 后端运行视觉分析（当前为 Mock 提供方）。需要运行 `npm run backend`。'
+  readonly displayName = 'FastAPI 后端（Kimi/Mock）'
+  readonly description =
+    '通过本地 FastAPI 后端运行视觉分析；后端已配置 Kimi Key 时使用 Kimi，否则回退 Mock。需要运行 `npm run backend`。'
   readonly requiresBackend = true
 
   async analyze(
@@ -31,7 +32,7 @@ export class VisionHttpProvider implements AIVisionProvider {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        provider: 'mock',
+        provider: 'auto',
         references: refs.map((r) => ({
           imageId: r.imageId,
           dataUrl: r.dataUrl,
