@@ -133,6 +133,37 @@ export interface Portrait2DLayer {
   svg: string
   /** CharacterAsset field(s) that drove this layer (provenance preserved). */
   sources: Record<string, AssetSource>
+  /** Phase 3-4.5: deterministic animation anchor (metadata only, never affects SVG). */
+  anchor?: Portrait2DAnchor
+}
+
+export interface Portrait2DAnchor {
+  /** x in portrait coordinate space (origin top-left). */
+  x: number
+  /** y in portrait coordinate space (origin top-left). */
+  y: number
+}
+
+/** Animation parameter declaration (declared, never evaluated this stage). */
+export type Portrait2DParameterId = 'headYaw' | 'headPitch' | 'eyeOpen' | 'mouthOpen' | 'bodySway'
+
+export interface Portrait2DParameterSpec {
+  id: Portrait2DParameterId
+  /** Normalized range, e.g. [-1, 1]. */
+  range: [number, number]
+  /** Rest value, e.g. 0. */
+  default: number
+  /** Layers this parameter would drive (metadata binding). */
+  binds: Portrait2DLayerId[]
+}
+
+/** Individually animatable appendage (declared only when anatomy says so). */
+export interface AppendageSpec {
+  id: string
+  /** Anchor for this appendage (metadata only). */
+  anchor: Portrait2DAnchor
+  /** Layer the appendage lives in (always 'accessory'). */
+  layer: Portrait2DLayerId
 }
 
 export interface Portrait2DDescriptor {
@@ -148,7 +179,11 @@ export interface Portrait2DDescriptor {
   /** Render-parameter source snapshot. */
   assetSource: CharacterAsset
   /** Reserved extension point for a future Cubism exporter. */
-  cubism: { present: false }
+  cubism: { present: false; parameters: Record<Portrait2DParameterId, string> }
+  /** Phase 3-4.5: declared animation parameters (metadata only, not evaluated). */
+  parameters?: Portrait2DParameterSpec[]
+  /** Phase 3-4.5: individually animatable appendages (only when anatomy says so). */
+  appendages?: AppendageSpec[]
 }
 
 export interface Portrait2DResult {

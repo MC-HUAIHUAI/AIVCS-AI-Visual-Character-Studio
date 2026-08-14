@@ -190,7 +190,14 @@ check('11. descriptor complete and honest', () => {
   assert.equal(d.height, 600)
   assert.equal(d.frontView, true)
   assert.equal(d.backPattern, '背部白色条纹')
-  assert.deepEqual(d.cubism, { present: false })
+  assert.equal(d.cubism.present, false)
+  assert.deepEqual(d.cubism.parameters, {
+    headYaw: '',
+    headPitch: '',
+    eyeOpen: '',
+    mouthOpen: '',
+    bodySway: ''
+  })
   assert.ok(Array.isArray(d.layers) && d.layers.length > 0)
 })
 
@@ -233,3 +240,81 @@ check('16. logic is pure - no network surface', () => {
   }
 })
 
+// ---- Phase 3-4.5: metadata (anchors / parameters / appendages) ----
+
+// 17. SVG golden: byte-identical to Phase 3-4
+check('17. SVG golden identical to Phase 3-4', () => {
+  const crypto = require('node:crypto')
+  // humanoid - same inputs as the Phase 3-4 golden capture.
+  const h = logic.buildPortrait2D(spec(), asset({ hairColor: '#FFD700', eyeColor: '#00BFFF', skinColor: '#E8CDB3', outfitColors: ['#FF4500', '#228B22'] }))
+  const hSha = crypto.createHash('sha256').update(h.result.svg).digest('hex')
+  assert.equal(hSha, 'd045e3608eb281210aa1e9c2055578f01c9b3e584c70b15fb2da4ca2707ef0de')
+  assert.equal(h.result.svg.length, 514)
+  // biped-anthro with appendages
+  const a = logic.buildPortrait2D(
+    spec('biped-anthro', '兽', { ears: true, horns: true, tail: 'single', wings: true }),
+    asset({ hairColor: '#884422', eyeColor: '#00BFFF', skinColor: '#E8CDB3', outfitColors: ['#445566'], backPattern: '白背纹' })
+  )
+  const aSha = crypto.createHash('sha256').update(a.result.svg).digest('hex')
+  assert.equal(aSha, '8e1c63e4e2771f1d009dbcad2f67ca384c5abbc7d0cf2cd546b36dc7f69e8764')
+  assert.equal(a.result.svg.length, 1030)
+})
+
+// 18. five parameters exist with range/default and binds
+check('18. five parameters, range [-1,1], default 0, binds correct', () => {
+  const out = logic.buildPortrait2D(spec(), asset())
+  const params = out.result.descriptor.parameters
+  assert.ok(Array.isArray(params) && params.length === 5)
+  const byId = Object.fromEntries(params.map((p) => [p.id, p]))
+  for (const id of ['headYaw', 'headPitch', 'eyeOpen', 'mouthOpen', 'bodySway']) {
+    assert.ok(byId[id], `missing ${id}`)
+    assert.deepEqual(byId[id].range, [-1, 1])
+    assert.equal(byId[id].default, 0)
+  }
+  assert.deepEqual(byId.headYaw.binds, ['face', 'hair', 'eyes', 'accessory'])
+  assert.deepEqual(byId.headPitch.binds, ['face', 'hair', 'eyes'])
+  assert.deepEqual(byId.eyeOpen.binds, ['eyes'])
+  assert.deepEqual(byId.mouthOpen.binds, ['face'])
+  assert.deepEqual(byId.bodySway.binds, ['body', 'outfit'])
+})
+
+// 19. layer anchors deterministic metadata
+check('19. layer anchors deterministic', () => {
+  const s = spec()
+  const a = logic.buildPortrait2D(s, asset()).result.descriptor.layers.map((l) => l.anchor)
+  const b = logic.buildPortrait2D(s, asset()).result.descriptor.layers.map((l) => l.anchor)
+  assert.deepEqual(a, b)
+  const face = logic.buildPortrait2D(s, asset()).result.descriptor.layers.find((l) => l.id === 'face')
+  assert.deepEqual(face.anchor, { x: 200, y: 150 })
+})
+
+// 20. appendages only when anatomy present, individually listed
+check('20. appendages per anatomy, not guessed', () => {
+  const none = logic.buildPortrait2D(spec('biped-anthro'), asset())
+  assert.deepEqual(none.result.descriptor.appendages, [])
+  const withAnatomy = logic.buildPortrait2D(
+    spec('biped-anthro', '兽', { ears: true, horns: true, tail: 'single', wings: true }),
+    asset()
+  )
+  const ids = withAnatomy.result.descriptor.appendages.map((ap) => ap.id).sort()
+  assert.deepEqual(ids, ['ears_L', 'ears_R', 'horn_L', 'horn_R', 'tail', 'wing_L', 'wing_R'])
+  // all live in accessory layer
+  assert.ok(withAnatomy.result.descriptor.appendages.every((ap) => ap.layer === 'accessory'))
+})
+
+// 21. mouthOpen declared but no fabricated mouth in SVG
+check('21. mouthOpen declared, no mouth fabricated', () => {
+  const out = logic.buildPortrait2D(spec(), asset())
+  const mouth = out.result.descriptor.parameters.find((p) => p.id === 'mouthOpen')
+  assert.ok(mouth)
+  assert.ok(!out.result.svg.includes('mouth'))
+})
+
+// 22. cubism.present false, parameters empty
+check('22. cubism.present=false, parameters empty', () => {
+  const out = logic.buildPortrait2D(spec(), asset())
+  assert.equal(out.result.descriptor.cubism.present, false)
+  const params = out.result.descriptor.cubism.parameters
+  assert.deepEqual(Object.keys(params).sort(), ['bodySway', 'eyeOpen', 'headPitch', 'headYaw', 'mouthOpen'])
+  assert.ok(Object.values(params).every((v) => v === ''))
+})

@@ -1,11 +1,15 @@
 import type {
   AnatomyGraph,
+  AppendageSpec,
   AssetSource,
   CharacterAsset,
   CharacterSpec,
+  Portrait2DAnchor,
   Portrait2DLayer,
   Portrait2DLayerId,
   Portrait2DOutput,
+  Portrait2DParameterId,
+  Portrait2DParameterSpec,
   Portrait2DResult
 } from '@shared/types'
 
@@ -106,6 +110,66 @@ function layerSource(asset: CharacterAsset | null | undefined, id: Portrait2DLay
   return sourceOf(asset, LAYER_SOURCE_FIELD[id])
 }
 
+/**
+ * Deterministic animation anchors per layer (metadata only - never affects SVG
+ * output). Coordinates match the portrait geometry (origin top-left).
+ */
+function layerAnchor(id: Portrait2DLayerId): Portrait2DAnchor {
+  switch (id) {
+    case 'body':
+      return { x: 200, y: 330 }
+    case 'outfit':
+      return { x: 200, y: 330 }
+    case 'face':
+      return { x: 200, y: 150 }
+    case 'eyes':
+      return { x: 200, y: 150 }
+    case 'hair':
+      return { x: 200, y: 110 }
+    case 'accessory':
+      return { x: 200, y: 150 }
+  }
+}
+
+/**
+ * Declared animation parameters (metadata only, never evaluated this stage).
+ * Each parameter is normalized to [-1, 1], rest 0, and lists the layers it
+ * would drive for a future runtime.
+ */
+function defaultParameters(): Portrait2DParameterSpec[] {
+  return [
+    { id: 'headYaw', range: [-1, 1], default: 0, binds: ['face', 'hair', 'eyes', 'accessory'] },
+    { id: 'headPitch', range: [-1, 1], default: 0, binds: ['face', 'hair', 'eyes'] },
+    { id: 'eyeOpen', range: [-1, 1], default: 0, binds: ['eyes'] },
+    { id: 'mouthOpen', range: [-1, 1], default: 0, binds: ['face'] },
+    { id: 'bodySway', range: [-1, 1], default: 0, binds: ['body', 'outfit'] }
+  ]
+}
+
+/**
+ * Individually animatable appendages - only declared when the anatomy actually
+ * has them (never guessed). Anchors match the SVG path geometry.
+ */
+function anatomyAppendages(anatomy: AnatomyGraph): AppendageSpec[] {
+  const out: AppendageSpec[] = []
+  if (anatomy.ears) {
+    out.push({ id: 'ears_L', layer: 'accessory', anchor: { x: 140, y: 55 } })
+    out.push({ id: 'ears_R', layer: 'accessory', anchor: { x: 260, y: 55 } })
+  }
+  if (anatomy.horns || anatomy.antlers) {
+    out.push({ id: 'horn_L', layer: 'accessory', anchor: { x: 150, y: 37 } })
+    out.push({ id: 'horn_R', layer: 'accessory', anchor: { x: 250, y: 37 } })
+  }
+  if (anatomy.wings) {
+    out.push({ id: 'wing_L', layer: 'accessory', anchor: { x: 90, y: 260 } })
+    out.push({ id: 'wing_R', layer: 'accessory', anchor: { x: 310, y: 260 } })
+  }
+  if (anatomy.tail === 'single' || anatomy.tail === 'multiple') {
+    out.push({ id: 'tail', layer: 'accessory', anchor: { x: 200, y: 520 } })
+  }
+  return out
+}
+
 interface BodyLayers {
   body: string
   outfit: string
@@ -169,7 +233,8 @@ function buildFullPortrait(spec: CharacterSpec, asset: CharacterAsset | null | u
     id,
     order: LAYER_ORDER.indexOf(id),
     svg: layers[id],
-    sources: { [id]: layerSource(asset, id) }
+    sources: { [id]: layerSource(asset, id) },
+    anchor: layerAnchor(id)
   }))
 
   return toResult(spec, asset, layerDefs)
@@ -271,6 +336,13 @@ function toResult(
   asset: CharacterAsset | null | undefined,
   layerDefs: Portrait2DLayer[]
 ): Portrait2DResult {
+  const parameterIds: Portrait2DParameterId[] = [
+    'headYaw',
+    'headPitch',
+    'eyeOpen',
+    'mouthOpen',
+    'bodySway'
+  ]
   const descriptor = {
     version: 1 as const,
     kind: '2d-layered' as const,
@@ -281,7 +353,17 @@ function toResult(
     frontView: true,
     backPattern: asset?.backPattern ?? null,
     assetSource: asset ?? emptyAsset(),
-    cubism: { present: false as const }
+    cubism: {
+      present: false as const,
+      // Reserved mapping slot for a future Cubism exporter - empty for now.
+      parameters: Object.fromEntries(parameterIds.map((id) => [id, ''])) as Record<
+        Portrait2DParameterId,
+        string
+      >
+    },
+    // Phase 3-4.5: declared (not evaluated) animation metadata.
+    parameters: defaultParameters(),
+    appendages: anatomyAppendages(spec.anatomy)
   }
 
   return {
