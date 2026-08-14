@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .vision import VisionAnalysisMeta, VisionImageInput
+from .asset import GlbStats
 
 CharacterStyle = Literal["stylized", "realistic", "anime", "pixel"]
 CharacterGender = Literal["female", "male", "neutral"]
@@ -118,6 +119,8 @@ class JobResult(_CamelModel):
     size_bytes: int | None = Field(default=None, alias="sizeBytes")
     provider_id: str | None = Field(default=None, alias="providerId")
     source_job_id: str | None = Field(default=None, alias="sourceJobId")
+    # Phase 2.5-B analyzer statistics (optional).
+    stats: GlbStats | None = None
 
 
 class ModelMetaResponse(_CamelModel):
@@ -131,6 +134,7 @@ class ModelMetaResponse(_CamelModel):
     source_job_id: str = Field(alias="sourceJobId")
     spec_hash: str = Field(alias="specHash")
     created_at: float = Field(alias="createdAt")
+    stats: GlbStats | None = None
 
 
 class JobStatusResponse(_CamelModel):

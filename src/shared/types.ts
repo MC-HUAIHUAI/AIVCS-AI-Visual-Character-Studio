@@ -369,6 +369,62 @@ export interface ModelAsset {
   sourceJobId?: string
   sizeBytes?: number
   mime?: string
+  /** Phase 2.5-B: analyzer statistics (optional, from the backend - never guessed). */
+  glbStats?: GlbStats
+}
+
+/* ------------------------------------------------------------------------ */
+/* GLB asset analysis (Phase 2.5)                                            */
+/* ------------------------------------------------------------------------ */
+
+export interface GlbBounds {
+  min: [number, number, number]
+  max: [number, number, number]
+}
+
+export interface GlbDimensions {
+  x: number
+  y: number
+  z: number
+}
+
+export interface GlbCenter {
+  x: number
+  y: number
+  z: number
+}
+
+export interface MeshStat {
+  name: string
+  index: number
+  vertexCount: number
+  indexCount: number
+  triangleCount: number
+  materialIndex: number | null
+  hasNormals: boolean
+  hasUVs: boolean
+  mode: number
+}
+
+/** Structural statistics produced by the GLB Asset Analyzer. */
+export interface GlbStats {
+  format: string
+  version: number
+  sizeBytes: number
+  meshCount: number
+  primitiveCount: number
+  vertexCount: number
+  indexCount: number
+  triangleCount: number
+  materialCount: number
+  textureCount: number
+  hasNormals: boolean
+  hasUVs: boolean
+  bounds: GlbBounds | null
+  dimensions: GlbDimensions | null
+  center: GlbCenter | null
+  meshStats: MeshStat[]
+  warnings: string[]
 }
 
 export interface ProjectData {

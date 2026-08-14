@@ -200,7 +200,8 @@ async function backendFlow(
         mime: dto.result.mime,
         sizeBytes: dto.result.size_bytes,
         providerId: dto.result.provider_id,
-        sourceJobId: dto.result.source_job_id
+        sourceJobId: dto.result.source_job_id,
+        glbStats: dto.result.stats
       })
       useProjectStore.getState().addModel(model, bytes)
       finish({ status: 'done', progress: 100, message: '生成完成', resultModelId: dto.result.model_id })
@@ -250,7 +251,8 @@ async function localFlow(
       mime: result.mime,
       sizeBytes: result.sizeBytes,
       providerId: result.providerId,
-      sourceJobId: result.sourceJobId
+      sourceJobId: result.sourceJobId,
+      glbStats: result.glbStats
     })
     useProjectStore.getState().addModel(model, result.bytes)
     finish({ status: 'done', progress: 100, message: '生成完成', resultModelId: result.modelId })

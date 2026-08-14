@@ -4,6 +4,7 @@ from fastapi.responses import Response
 from .. import config
 from ..jobs import cancel_job, create_job, get_job, get_model, get_model_record
 from ..providers.registry import get_provider, list_providers
+from ..schemas.asset import GlbStats
 from ..schemas.character import GenerateRequest, JobStatusResponse, ModelMetaResponse
 from ..services.model_store import spec_hash
 
@@ -67,6 +68,7 @@ async def model_meta(model_id: str):
         sourceJobId=record.source_job_id,
         specHash=record.spec_hash,
         createdAt=record.created_at,
+        stats=GlbStats.model_validate(record.stats) if record.stats else None,
     )
 
 

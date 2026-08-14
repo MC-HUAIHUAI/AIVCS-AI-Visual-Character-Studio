@@ -36,6 +36,11 @@ MODEL_PAIRS = [
     ("VisionPerViewMeta", "backend.app.schemas.vision", "VisionPerViewMeta"),
     ("ViewAnalysis", "backend.app.schemas.vision", "ViewAnalysis"),
     ("ViewConflict", "backend.app.schemas.vision", "ViewConflict"),
+    ("GlbBounds", "backend.app.schemas.asset", "GlbBounds"),
+    ("GlbDimensions", "backend.app.schemas.asset", "GlbDimensions"),
+    ("GlbCenter", "backend.app.schemas.asset", "GlbCenter"),
+    ("MeshStat", "backend.app.schemas.asset", "MeshStat"),
+    ("GlbStats", "backend.app.schemas.asset", "GlbStats"),
 ]
 
 

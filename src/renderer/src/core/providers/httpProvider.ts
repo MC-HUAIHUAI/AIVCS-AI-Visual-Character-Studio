@@ -112,6 +112,7 @@ async function runBackendGenerate(
       providerId: dto.result.provider_id,
       sourceJobId: dto.result.source_job_id,
       mime: dto.result.mime ?? mime,
+      glbStats: dto.result.stats,
       bytes
     }
   }

@@ -15,13 +15,19 @@ Rules:
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 import uuid
+from dataclasses import asdict
 from typing import Awaitable, Callable
 
 from .providers.base import CancellationToken, ProgressCallback, ProviderCancelledError, ProviderError, ProviderTimeoutError
+from .schemas.asset import GlbStats
 from .schemas.character import JobResult, JobStep, JobStatusResponse
+from .services.glb_analyzer import analyze_glb
 from .services.model_store import ModelRecord, ModelStore
+
+logger = logging.getLogger("aivcs.jobs")
 
 Runner = Callable[[ProgressCallback, CancellationToken], Awaitable[bytes]]
 
@@ -145,11 +151,21 @@ async def run_job(job: JobRecord, runner: Runner) -> None:
         job.error = _safe_error(exc)
         job.message = job.error
     else:
+        # Phase 2.5-B: analyze the successfully generated GLB (analyze_glb also
+        # runs validate_glb as its gate). An analyzer/validation failure must
+        # NEVER turn a done job into failed - we degrade to no stats + a log.
+        stats = None
+        try:
+            stats = asdict(analyze_glb(result_bytes))
+        except Exception as exc:  # noqa: BLE001 - safe degradation
+            logger.warning("job %s: GLB analysis failed: %s", job.job_id, exc)
+
         record = _store.save(
             result_bytes,
             provider_id=job.provider_name,
             source_job_id=job.job_id,
             spec_hash=job.spec_hash,
+            stats=stats,
         )
         job.result = JobResult(
             modelId=record.id,
@@ -158,6 +174,7 @@ async def run_job(job: JobRecord, runner: Runner) -> None:
             sizeBytes=record.size_bytes,
             providerId=record.provider_id,
             sourceJobId=record.source_job_id,
+            stats=GlbStats.model_validate(record.stats) if record.stats else None,
         )
         job.status = "done"
         job.progress = 1.0

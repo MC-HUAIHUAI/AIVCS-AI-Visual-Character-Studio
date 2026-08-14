@@ -117,6 +117,32 @@ check('13. ModelAsset metadata mapped from job result', () => {
   assert.equal(asset.providerId, 'Mock')
   assert.equal(asset.sourceJobId, 'job42')
   assert.equal(asset.source, 'generated')
+  assert.equal(asset.glbStats, undefined) // absent stats -> undefined (backward compatible)
+})
+
+// 13b glbStats pass-through
+check('13b. glbStats passed through from job result (no guessing)', () => {
+  const stats = {
+    format: 'glb',
+    version: 2,
+    sizeBytes: 111857,
+    meshCount: 17,
+    primitiveCount: 17,
+    vertexCount: 100,
+    indexCount: 150,
+    triangleCount: 50,
+    materialCount: 9,
+    textureCount: 0,
+    hasNormals: true,
+    hasUVs: false,
+    bounds: { min: [0, 0, 0], max: [1, 1, 1] },
+    dimensions: { x: 1, y: 1, z: 1 },
+    center: { x: 0.5, y: 0.5, z: 0.5 },
+    meshStats: [],
+    warnings: []
+  }
+  const asset = modelAssetFromResult('m2', 'generated_character', { glbStats: stats })
+  assert.deepEqual(asset.glbStats, stats)
 })
 
 // 14 references limit

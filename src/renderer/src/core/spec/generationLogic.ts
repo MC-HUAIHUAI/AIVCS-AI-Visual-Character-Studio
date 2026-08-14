@@ -1,4 +1,4 @@
-import type { CharacterSpec, GenerationJob, GenerationJobStep, ImageAsset, ModelAsset, ModelFormat } from '@shared/types'
+import type { CharacterSpec, GenerationJob, GenerationJobStep, GlbStats, ImageAsset, ModelAsset, ModelFormat } from '@shared/types'
 import type { VisionImageInput } from '../providers/visionProvider'
 
 /**
@@ -96,6 +96,7 @@ export interface JobResultDto {
   size_bytes?: number
   provider_id?: string
   source_job_id?: string
+  stats?: GlbStats
 }
 
 export interface JobDto {
@@ -144,6 +145,7 @@ export interface ModelAssetMeta {
   format?: ModelFormat
   mime?: string
   filePath?: string | null
+  glbStats?: GlbStats
 }
 
 /** Maps generation result metadata to ModelAsset fields (no guessing). */
@@ -162,7 +164,8 @@ export function modelAssetFromResult(
     providerId: meta.providerId,
     sourceJobId: meta.sourceJobId,
     sizeBytes: meta.sizeBytes,
-    mime: meta.mime
+    mime: meta.mime,
+    glbStats: meta.glbStats
   }
 }
 

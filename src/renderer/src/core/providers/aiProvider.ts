@@ -1,4 +1,4 @@
-import type { CharacterSpec, ModelFormat } from '@shared/types'
+import type { CharacterSpec, GlbStats, ModelFormat } from '@shared/types'
 import type { VisionImageInput } from './visionProvider'
 
 /** Cooperative cancellation flag for a running generation job. */
@@ -34,6 +34,8 @@ export interface GeneratedModelResult {
   providerId?: string
   sourceJobId?: string
   mime?: string
+  /** Phase 2.5-B analyzer statistics (optional, from the backend - never guessed). */
+  glbStats?: GlbStats
 }
 
 export interface GenerationProgress {

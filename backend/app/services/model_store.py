@@ -15,7 +15,7 @@ import json
 import os
 import time
 import uuid
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from .. import config
@@ -36,6 +36,10 @@ class ModelRecord:
     spec_hash: str = ""
     created_at: float = 0.0
     file_path: str = ""
+    # Phase 2.5-B (optional, backward compatible): analyzer statistics + any
+    # normalization notes. Stored as plain dicts so the JSON sidecar round-trips.
+    stats: dict | None = None
+    normalizations: list[str] = field(default_factory=list)
 
 
 def spec_hash(spec: CharacterSpec) -> str:
@@ -64,7 +68,14 @@ class ModelStore:
     # write (atomic)
     # ------------------------------------------------------------------ #
 
-    def save(self, data: bytes, provider_id: str, source_job_id: str, spec_hash: str) -> ModelRecord:
+    def save(
+        self,
+        data: bytes,
+        provider_id: str,
+        source_job_id: str,
+        spec_hash: str,
+        stats: dict | None = None,
+    ) -> ModelRecord:
         model_id = str(uuid.uuid4())
         target = self._model_path(model_id)
 
@@ -80,6 +91,7 @@ class ModelStore:
             spec_hash=spec_hash,
             created_at=time.time(),
             file_path=str(target),
+            stats=stats,
         )
         self._write_meta(record)
         return record
