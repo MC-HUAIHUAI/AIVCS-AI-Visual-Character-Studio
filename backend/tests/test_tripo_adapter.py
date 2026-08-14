@@ -21,11 +21,15 @@ from backend.app.providers.remote.tripo_client import (  # noqa: E402
     TripoClient,
     TripoTaskDto,
     map_tripo_status,
+    multiview_suitability,
+    refs_to_tripo_input,
     tripo_error_to_provider_error,
     tripo_task_to_remote_task,
 )
 from backend.app.providers.registry import REGISTRY  # noqa: E402
+from backend.app.providers.remote.remote_base import RemoteTaskError, RemoteTaskInfo  # noqa: E402
 from backend.app.schemas.character import CharacterSpec  # noqa: E402
+from backend.app.schemas.vision import VisionImageInput  # noqa: E402
 from backend.app.services.glb_builder import validate_glb  # noqa: E402
 from backend.app.services.model_store import ModelStore  # noqa: E402
 
@@ -107,6 +111,42 @@ class TripoScaffoldTest(unittest.TestCase):
         self.assertIsInstance(tripo_error_to_provider_error(TimeoutError()), ProviderTimeoutError)
         self.assertIsInstance(tripo_error_to_provider_error(E(500)), ProviderError)
         self.assertIn("服务异常", str(tripo_error_to_provider_error(E(500))))
+
+
+class TripoRefsMappingTest(unittest.TestCase):
+    def ref(self, image_id, view):
+        return VisionImageInput(imageId=image_id, dataUrl="data:image/png;base64,AA", view=view)
+
+    def test_single_image_maps_to_image_to_model(self):
+        payload = refs_to_tripo_input([self.ref("a", "front")])
+        self.assertEqual(payload["type"], "image_to_model")
+        self.assertEqual(len(payload["images"]), 1)
+        self.assertEqual(payload["images"][0]["view"], "front")
+
+    def test_multiview_images_map_to_multiview_to_model(self):
+        payload = refs_to_tripo_input([self.ref("a", "front"), self.ref("b", "side"), self.ref("c", "back")])
+        self.assertEqual(payload["type"], "multiview_to_model")
+        self.assertEqual(len(payload["images"]), 3)
+        views = {img["view"] for img in payload["images"]}
+        self.assertEqual(views, {"front", "side", "back"})
+
+    def test_multiview_suitability(self):
+        self.assertTrue(multiview_suitability(["front", "side", "back"])["usable"])
+        self.assertEqual(multiview_suitability(["front", "side", "back"])["task_type"], "multiview_to_model")
+        self.assertFalse(multiview_suitability(["front"])["usable"])
+        self.assertEqual(multiview_suitability(["front"])["task_type"], "image_to_model")
+        self.assertTrue(multiview_suitability(["side", "back"])["usable"])
+
+    def test_custom_does_not_count_as_primary_view(self):
+        # front + custom -> only 1 non-custom view -> not Multiview-usable
+        r = multiview_suitability(["front", "custom"])
+        self.assertFalse(r["usable"])
+        self.assertEqual(r["multiview_candidates"], ["front"])
+
+    def test_none_view_defaults_to_front(self):
+        r = multiview_suitability([None, "side"])
+        self.assertEqual(r["distinct_views"], ["front", "side"])
+        self.assertTrue(r["usable"])
 
 
 class OfflineFakeVendorTest(unittest.TestCase):

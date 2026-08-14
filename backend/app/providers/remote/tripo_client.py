@@ -1,4 +1,10 @@
-"""Tripo adapter - OFFLINE SCAFFOLD (Phase 2.4-C).
+"""Tripo adapter - OFFLINE SCAFFOLD (Phase 2.4-C / 2.4-D-pre).
+
+STATUS: **UNVERIFIED**. As of 2026-08-14 the official Tripo API documentation
+(platform.tripo3d.ai / api-docs.tripo3d.ai / docs.tripo3d.ai) could NOT be
+reached from the build environment, so no endpoint / DTO / status string below
+is claimed as confirmed. Everything vendor-specific is a STRUCTURAL PLACEHOLDER
+that must be verified against the official docs before any real call.
 
 Tripo (tripo3d.ai) is selected as the first concrete vendor target. This module
 implements the vendor seam ONLY - it performs NO network requests:
@@ -9,10 +15,8 @@ implements the vendor seam ONLY - it performs NO network requests:
   - create/poll/cancel/download raise NotImplementedError once a dummy key is
     present, proving the scaffold never touches the network.
 
-The request/response DTOs and the status/error mapping below are STRUCTURAL
-placeholders: their concrete field names must be verified against the official
-Tripo API documentation before real calls are enabled. Until then, all behavior
-is exercised through OfflineFakeVendorClient and the pure mapping functions.
+All behavior is exercised offline through OfflineFakeVendorClient and the pure
+mapping/design functions below (which are testable without any vendor contract).
 """
 
 from __future__ import annotations
@@ -113,6 +117,51 @@ def tripo_error_to_provider_error(err: Exception) -> ProviderError:
     if status is not None and status >= 500:
         return ProviderError(f"Tripo 服务异常（{message}）")
     return ProviderError(f"Tripo 请求失败：{message}")
+
+
+# --------------------------------------------------------------------------- #
+# CharacterSpec.references[] -> Tripo input (DESIGN DRAFT - unverified)
+# --------------------------------------------------------------------------- #
+
+# Phase 2.2 reference views that map directly onto a Tripo Multiview image set.
+MULTIVIEW_VIEWS = ("front", "side", "back")
+
+
+def refs_to_tripo_input(references: list[VisionImageInput]) -> dict:
+    """DESIGN DRAFT (UNVERIFIED): map AIVCS references to a Tripo task payload.
+
+    The exact request field names are NOT confirmed and must be checked against
+    the official Tripo docs. This function only establishes the intended shape:
+    one image per reference (data URL), each tagged with its view, and a task
+    type chosen by how many non-custom views are present."""
+    images = []
+    for ref in references:
+        view = ref.view or "front"
+        images.append({"image": ref.data_url, "view": view})
+    return {
+        "type": "multiview_to_model" if len(images) >= 2 else "image_to_model",
+        "images": images,
+    }
+
+
+def multiview_suitability(views: list[str | None]) -> dict:
+    """Pure design check: can the given views drive Tripo Multiview?
+
+    - front/side/back are the direct Multiview inputs (Phase 2.2 views map 1:1);
+    - custom is treated as an extra view, NOT a primary Multiview axis;
+    - a single usable view is only suitable for image_to_model.
+
+    This does not depend on any vendor contract and is fully testable offline."""
+    present = [v or "front" for v in views]
+    non_custom = [v for v in present if v in MULTIVIEW_VIEWS]
+    usable = len(non_custom) >= 2
+    return {
+        "usable": usable,
+        "distinct_views": sorted(set(present)),
+        "multiview_candidates": sorted(set(non_custom)),
+        "task_type": "multiview_to_model" if usable else "image_to_model",
+        "notes": [] if usable else ["仅 1 个有效视角（front/side/back），无法构成 Multiview，将回退 image_to_model"],
+    }
 
 
 # --------------------------------------------------------------------------- #

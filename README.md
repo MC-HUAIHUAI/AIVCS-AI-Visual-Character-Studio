@@ -123,6 +123,16 @@ npm run dev
   - 厂商差异全部封装在 client 内；**不修改** JobManager / ModelStore / CharacterSpec / generationStore。
 - **真实调用仍需人工授权**：本阶段及此前所有阶段均零真实 API、零联网、零充值。
 
+## Phase 2.4-D-pre — Tripo 契约核对：**未能完成（官方文档不可达）**
+
+- **核对结果：UNVERIFIED**。2026-08-14 起官方 Tripo 文档域名（`platform.tripo3d.ai` / `api-docs.tripo3d.ai` / `docs.tripo3d.ai` / `www.tripo3d.ai`）在构建环境全部无法访问，因此**未将任何 endpoint / DTO / 状态字符串声称已确认**。
+- 遵守"不伪造 / 不猜"原则：未虚构官方契约细节。`tripo_client.py` 已明确标注 UNVERIFIED，方法仍为离线骨架（`NotImplementedError`，零网络）。
+- **已完成的离线设计（纯函数、可测、不依赖契约）**：
+  - `refs_to_tripo_input(references)`：将 `CharacterSpec.references[]` 映射为 Tripo 任务载荷的形状（每图一个 data URL + view 标签；≥2 图 → `multiview_to_model`，单图 → `image_to_model`）。
+  - `multiview_suitability(views)`：判定 front/side/back 是否可直接用于 Tripo Multiview —— **结论（设计层面）：Phase 2.2 的 front/side/back 与 Tripo Multiview 天然 1:1 对应**；custom 仅作附加视角；单视角回退 `image_to_model`。
+  - 状态映射 / 错误映射 / `OfflineFakeVendorClient` 全流程不变。
+- **后续**：需官方文档可访问后，再按真实契约确认 endpoint/DTO/状态并启用真实适配；真实调用仍需人工授权。
+
 ## Mock 功能（模拟，非真实实现）
 
 - **Mock AI Provider**（前端本地 + 后端各一份）：按角色类型返回对应演示 GLB（人类→人形、非人类→兽人狐），模拟各阶段耗时与进度；无需网络、无需任何 AI API
