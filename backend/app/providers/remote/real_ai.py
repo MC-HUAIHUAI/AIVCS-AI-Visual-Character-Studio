@@ -1,4 +1,4 @@
-"""RealAI image-to-3d provider - vendor-agnostic adapter (Phase 2.4-A).
+"""RealAI image-to-3d provider - vendor-agnostic adapter (Phase 2.4-A/B).
 
 Implements the AIImage3DProvider contract by driving any IRemote3DClient
 through a unified remote-task flow:
@@ -12,8 +12,13 @@ Remote state mapping to job outcomes:
     timed_out  -> ProviderTimeoutError     -> job timed_out
     cancelled  -> ProviderCancelledError   -> job cancelled
     queued/running -> keep polling
-    user cancel (cancel_event) -> client.cancel_task -> ProviderCancelledError
-    local deadline exceeded -> ProviderTimeoutError -> job timed_out
+    user cancel (cancel_event) -> best-effort client.cancel_task THEN
+                                  ProviderCancelledError -> job cancelled
+    local deadline exceeded -> best-effort cancel + ProviderTimeoutError
+                               -> job timed_out
+
+No auto-retry; cancel_task is invoked at most once per run; a failing
+cancel_task never masks the user's cancel intent.
 """
 
 from __future__ import annotations
@@ -35,6 +40,10 @@ from ...services.glb_builder import validate_glb
 from .remote_base import IRemote3DClient, RemoteTaskError
 
 STEPS = ["创建远程任务", "等待远程任务", "下载 GLB", "校验 GLB", "完成"]
+
+# Upper bound for a single remote poll (the overall job deadline still applies
+# via the JobManager; this guards a single hung poll call).
+POLL_ATTEMPT_TIMEOUT_SECONDS = 60.0
 
 
 class RealAIImage3DProvider(AIImage3DProvider):
@@ -73,9 +82,23 @@ class RealAIImage3DProvider(AIImage3DProvider):
         cancel_event: CancellationToken | None = None,
     ) -> bytes:
         total = len(STEPS)
+        notified = False
 
-        async def check_cancel() -> None:
+        async def notify_cancel_remote(task_id: str | None) -> None:
+            """Best-effort remote cancel; called at most once per run. Never
+            raises - the caller's cancellation semantics always win."""
+            nonlocal notified
+            if notified or task_id is None:
+                return
+            notified = True
+            try:
+                await self.client.cancel_task(task_id, cancel_event)
+            except Exception:  # noqa: BLE001 - do not mask user cancel intent
+                pass
+
+        async def check_cancel(task_id: str | None = None) -> None:
             if cancel_event is not None and cancel_event.is_cancelled:
+                await notify_cancel_remote(task_id)
                 raise ProviderCancelledError("已取消")
 
         # 1) create task
@@ -86,20 +109,26 @@ class RealAIImage3DProvider(AIImage3DProvider):
             raise ProviderError(f"创建远程任务失败：{exc}") from exc
         on_progress(1, total, f"已创建远程任务 {info.task_id}")
 
-        # 2) poll with unified mapping + local deadline
+        # 2) poll with unified mapping + local deadline + per-poll timeout
         deadline = time.monotonic() + self._default_timeout_seconds
         while info.status in ("queued", "running"):
-            await check_cancel()
+            await check_cancel(info.task_id)
+
             if time.monotonic() > deadline:
-                try:
-                    await self.client.cancel_task(info.task_id, cancel_event)
-                except Exception:  # noqa: BLE001 - best effort
-                    pass
+                await notify_cancel_remote(info.task_id)
                 raise ProviderTimeoutError("生成超时")
+
+            poll_timeout = min(max(deadline - time.monotonic(), 0.1), POLL_ATTEMPT_TIMEOUT_SECONDS)
             try:
-                info = await self.client.poll_task(info.task_id, cancel_event)
+                info = await asyncio.wait_for(
+                    self.client.poll_task(info.task_id, cancel_event), timeout=poll_timeout
+                )
+            except TimeoutError:
+                await notify_cancel_remote(info.task_id)
+                raise ProviderTimeoutError("生成超时") from None
             except RemoteTaskError as exc:
                 raise ProviderError(f"轮询远程任务失败：{exc}") from exc
+
             on_progress(1, total, f"远程任务 {info.status}：{info.message or info.status}")
 
         if info.status == "failed":

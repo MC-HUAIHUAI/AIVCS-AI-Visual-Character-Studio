@@ -38,6 +38,10 @@ MODEL_DIR = Path(os.environ.get("AIVCS_MODEL_DIR", ROOT / "backend" / "data" / "
 # Models older than this are deleted by cleanup (hours).
 MODEL_TTL_HOURS = float(os.environ.get("AIVCS_MODEL_TTL_HOURS", "24"))
 
+# Safe default job timeout when a request omits timeoutSeconds (seconds), so a
+# remote provider can never wait forever. User-supplied timeouts still win.
+GENERATION_DEFAULT_TIMEOUT_SECONDS = float(os.environ.get("AIVCS_GENERATION_DEFAULT_TIMEOUT_SECONDS", "600"))
+
 # CORS origins allowed to talk to this backend (the Electron renderer).
 CORS_ORIGINS = [origin.strip() for origin in os.environ.get("AIVCS_CORS_ORIGINS", "*").split(",")]
 

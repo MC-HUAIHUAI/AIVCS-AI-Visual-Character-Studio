@@ -16,6 +16,8 @@ from backend.app.providers.base import CancellationToken, ProviderCancelledError
 from backend.app.providers.remote.mock_client import MockRemote3DClient  # noqa: E402
 from backend.app.providers.remote.mock_provider import MockRemote3DProvider  # noqa: E402
 from backend.app.providers.remote.real_ai import RealAIImage3DProvider  # noqa: E402
+from backend.app.providers.remote.remote_base import RemoteTaskError, RemoteTaskInfo  # noqa: E402
+from backend.app.providers.remote.vendor import VendorRemoteClient  # noqa: E402
 from backend.app.providers.registry import REGISTRY  # noqa: E402
 from backend.app.schemas.character import CharacterSpec  # noqa: E402
 from backend.app.services.glb_builder import validate_glb  # noqa: E402
@@ -137,6 +139,150 @@ class RemotePipelineTest(unittest.TestCase):
         self.assertEqual(provider.max_references, 4)
         self.assertTrue(provider.supports_cancel)
         self.assertTrue(provider.supports_timeout)
+
+
+class RecordingClient(MockRemote3DClient):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.cancel_calls: list[str] = []
+
+    async def cancel_task(self, task_id, cancel_event=None):
+        self.cancel_calls.append(task_id)
+        return await super().cancel_task(task_id, cancel_event)
+
+
+class FailingCancelClient(MockRemote3DClient):
+    async def cancel_task(self, task_id, cancel_event=None):
+        raise RuntimeError("cancel transport failed")
+
+
+class DownloadFailClient(MockRemote3DClient):
+    async def download_model(self, task_id, model_url, cancel_event=None):
+        raise RemoteTaskError("download exploded")
+
+
+class UnknownStatusClient(MockRemote3DClient):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._gave_unknown = False
+
+    async def poll_task(self, task_id, cancel_event=None):
+        if not self._gave_unknown:
+            self._gave_unknown = True
+            return RemoteTaskInfo(task_id=task_id, status="weird-state")
+        return await super().poll_task(task_id, cancel_event)
+
+
+class CancelNotifyTest(RemotePipelineTest):
+    def test_user_cancel_calls_client_cancel_task(self):
+        client = RecordingClient(scenario="success", poll_delay=0.5)
+        provider = RealAIImage3DProvider(client, default_timeout_seconds=30)
+        token = CancellationToken()
+
+        async def scenario():
+            task = asyncio.create_task(provider.generate(make_spec(), [], lambda _i, _t, _m: None, token))
+            await asyncio.sleep(0.1)
+            token.cancel()
+            with self.assertRaises(ProviderCancelledError):
+                await task
+
+        asyncio.run(scenario())
+        self.assertTrue(client.cancel_calls, "cancel_task should have been invoked")
+
+    def test_cancel_task_failure_still_cancelled(self):
+        client = FailingCancelClient(scenario="success", poll_delay=0.5)
+        provider = RealAIImage3DProvider(client, default_timeout_seconds=30)
+        token = CancellationToken()
+
+        async def scenario():
+            task = asyncio.create_task(provider.generate(make_spec(), [], lambda _i, _t, _m: None, token))
+            await asyncio.sleep(0.1)
+            token.cancel()
+            with self.assertRaises(ProviderCancelledError):
+                await task
+
+        asyncio.run(scenario())
+
+    def test_cancel_job_still_cancelled_when_cancel_task_fails(self):
+        async def scenario():
+            provider = RealAIImage3DProvider(FailingCancelClient(scenario="success", poll_delay=0.5), default_timeout_seconds=30)
+            spec = make_spec()
+            job = jobs.create_job("mock-remote", lambda cb, cancel: provider.generate(spec, [], cb, cancel))
+            await asyncio.sleep(0.05)
+            jobs.cancel_job(job.job_id)
+            final = await wait_terminal(job.job_id)
+            self.assertEqual(final.status, "cancelled")
+            self.assertTrue(final.cancelled_by_user)
+        asyncio.run(scenario())
+
+    def test_download_failure_maps_to_provider_error(self):
+        client = DownloadFailClient(scenario="success")
+        with self.assertRaises(ProviderError) as ctx:
+            self.run_provider(client)
+        self.assertIn("下载模型失败", str(ctx.exception))
+
+    def test_download_failure_job_failed(self):
+        async def scenario():
+            provider = RealAIImage3DProvider(DownloadFailClient(scenario="success"))
+            spec = make_spec()
+            job = jobs.create_job("mock-remote", lambda cb, cancel: provider.generate(spec, [], cb, cancel))
+            final = await wait_terminal(job.job_id)
+            self.assertEqual(final.status, "failed")
+            self.assertTrue(final.retryable)
+        asyncio.run(scenario())
+
+    def test_unknown_remote_status_maps_to_provider_error(self):
+        with self.assertRaises(ProviderError) as ctx:
+            self.run_provider(UnknownStatusClient(scenario="success"))
+        self.assertIn("未知远程状态", str(ctx.exception))
+
+    def test_invalid_glb_job_failed(self):
+        async def scenario():
+            provider = MockRemote3DProvider(scenario="invalid_glb")
+            spec = make_spec()
+            job = jobs.create_job("mock-remote", lambda cb, cancel: provider.generate(spec, [], cb, cancel))
+            final = await wait_terminal(job.job_id)
+            self.assertEqual(final.status, "failed")
+            self.assertTrue(final.retryable)
+        asyncio.run(scenario())
+
+    def test_provider_local_timeout_job_timed_out(self):
+        async def scenario():
+            provider = RealAIImage3DProvider(
+                MockRemote3DClient(scenario="success", polls_to_finish=100, poll_delay=0.2),
+                default_timeout_seconds=0.05,
+            )
+            spec = make_spec()
+            job = jobs.create_job("mock-remote", lambda cb, cancel: provider.generate(spec, [], cb, cancel))
+            final = await wait_terminal(job.job_id)
+            self.assertEqual(final.status, "timed_out")
+            self.assertTrue(final.timed_out)
+        asyncio.run(scenario())
+
+
+class VendorSkeletonTest(unittest.TestCase):
+    def test_without_key_not_configured(self):
+        client = VendorRemoteClient(api_key="")
+        self.assertFalse(client.configured)
+        with self.assertRaises(RemoteTaskError) as ctx:
+            asyncio.run(client.create_task(make_spec(), []))
+        self.assertIn("AIVCS_REAL3D_API_KEY", str(ctx.exception))
+
+    def test_with_key_raises_not_implemented_without_network(self):
+        client = VendorRemoteClient(api_key="dummy-key-not-real")
+        self.assertTrue(client.configured)
+        for call in (
+            client.create_task(make_spec(), []),
+            client.poll_task("t"),
+            client.cancel_task("t"),
+            client.download_model("t", "mock://x"),
+        ):
+            with self.assertRaises(NotImplementedError):
+                asyncio.run(call)
+
+    def test_real_provider_not_registered(self):
+        self.assertNotIn("vendor", REGISTRY)
+        self.assertNotIn("real-ai", REGISTRY)
 
 
 if __name__ == "__main__":

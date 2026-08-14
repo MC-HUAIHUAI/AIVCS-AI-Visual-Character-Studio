@@ -23,12 +23,15 @@ async def health():
 @router.post("/generate/image-to-3d", status_code=202)
 async def generate_image_to_3d(request: GenerateRequest):
     provider = get_provider(request.provider)
+    # Safe default deadline when the caller omits timeoutSeconds; an explicit
+    # value always wins (a 0 is treated as an explicit immediate timeout).
+    timeout = request.timeout_seconds if request.timeout_seconds is not None else config.GENERATION_DEFAULT_TIMEOUT_SECONDS
     job = create_job(
         provider.name,
         lambda on_progress, cancel_event: provider.generate(
             request.spec, request.references, on_progress, cancel_event
         ),
-        timeout_seconds=request.timeout_seconds,
+        timeout_seconds=timeout,
         spec_hash=spec_hash(request.spec),
     )
     return {"jobId": job.job_id}

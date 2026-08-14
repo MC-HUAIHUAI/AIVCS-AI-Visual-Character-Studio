@@ -101,6 +101,16 @@ npm run dev
   - **使用**：后端自动注册；前端 Provider 选择「本地低功耗 3D（CPU）」；经现有 JobManager（cancel/timeout）+ ModelStore 落盘；输出 GLB 已验证可被 three.js 加载
 - **测试**：`npm run test:backend`（64：状态机/取消/超时/ModelStore/GLB 结构/低功耗 Provider/旧请求兼容）+ `npm run test:frontend`（19+17，纯逻辑）
 
+## Phase 2.4 — 真实厂商接入层（当前状态）
+
+- **厂商无关远程适配器**：`IRemote3DClient` 契约（create/poll/cancel/download）+ `RealAIImage3DProvider`（统一远程状态 `queued→running→done|failed|timed_out|cancelled` → JobManager 终态映射；下载→`validate_glb`→ModelStore）。
+- **取消语义（Phase 2.4-B 修复）**：用户取消时先 best-effort 调用 `client.cancel_task`（最多一次，失败不掩盖取消），再转 `cancelled`。
+- **超时语义**：`poll_task` 有明确 asyncio 超时边界；请求未传 `timeoutSeconds` 时后端采用安全默认（`AIVCS_GENERATION_DEFAULT_TIMEOUT_SECONDS`，默认 600s）；显式值恒优先。
+- **GLB 校验**：`validate_glb` 将任何结构异常（含 JSON/accessor 越界）统一转为 `ValueError` → 安全 `ProviderError`（job failed），不扩展为完整解析器。
+- **mock-remote（模拟厂商）**：完全离线、确定性，覆盖 成功/失败/超时/取消/非法 GLB/创建错误/下载失败/未知状态；经 generationStore + JobManager + ModelStore 全链路可用。
+- **真实厂商：尚未启用**。`backend/app/providers/remote/vendor.py` 为离线骨架——从环境变量读 Key（`AIVCS_REAL3D_API_KEY`，预留）、无默认真实 endpoint、未配置 Key 绝不注册、不发任何网络请求。接入真实厂商只需实现 `IRemote3DClient`，**不需要**改动 JobManager / ModelStore / generationStore。
+- **当前禁止自动联网**：无真实厂商配置时不发起任何远程 3D 请求；需厂商 API Key 且经授权后才能真实调用。
+
 ## Mock 功能（模拟，非真实实现）
 
 - **Mock AI Provider**（前端本地 + 后端各一份）：按角色类型返回对应演示 GLB（人类→人形、非人类→兽人狐），模拟各阶段耗时与进度；无需网络、无需任何 AI API

@@ -112,7 +112,20 @@ def _pad4(buf: bytearray) -> None:
 
 
 def validate_glb(data: bytes) -> None:
-    """Validate a GLB is structurally legal. Raises ValueError on failure."""
+    """Validate a GLB is structurally legal. Raises ValueError on failure.
+
+    Any structural anomaly (including index/KeyError inside the JSON) is
+    normalized to ValueError so callers can rely on one exception type.
+    """
+    try:
+        _validate_glb_inner(data)
+    except ValueError:
+        raise
+    except (IndexError, KeyError, TypeError, AttributeError) as exc:
+        raise ValueError("malformed GLB structure") from exc
+
+
+def _validate_glb_inner(data: bytes) -> None:
     if len(data) < 20:
         raise ValueError("too short")
     if data[:4] != b"glTF":
