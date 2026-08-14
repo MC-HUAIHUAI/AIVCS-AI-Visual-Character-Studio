@@ -33,6 +33,16 @@ DEFAULT_PROVIDER = os.environ.get("AIVCS_DEFAULT_PROVIDER", "mock")
 # Simulated duration of a Mock image-to-3D generation (seconds).
 MOCK3D_DURATION_SECONDS = float(os.environ.get("AIVCS_MOCK3D_DURATION_SECONDS", "5"))
 
+
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.environ.get(name, "true" if default else "false").strip().lower()
+    return value in ("1", "true", "yes", "on")
+
+
+# LocalLowPower skinned output. Default OFF keeps the existing unskinned GLB
+# behavior byte-stable; enable for SkinnedMesh output (RigBuilder + skinning).
+LOCAL3D_RIG_ENABLED = _env_bool("AIVCS_LOCAL3D_RIG_ENABLED", False)
+
 # Persistent model output store.
 MODEL_DIR = Path(os.environ.get("AIVCS_MODEL_DIR", ROOT / "backend" / "data" / "models"))
 # Models older than this are deleted by cleanup (hours).

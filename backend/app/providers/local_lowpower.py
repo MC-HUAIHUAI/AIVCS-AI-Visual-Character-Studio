@@ -16,9 +16,11 @@ import struct
 import zlib
 
 from .base import AIImage3DProvider, CancellationToken, ProgressCallback, ProviderCancelledError
+from .. import config
 from ..schemas.character import CharacterSpec
 from ..schemas.vision import VisionImageInput
 from ..services.glb_builder import Primitive, build_glb
+from ..services.rig_builder import build_bone_tree
 
 FALLBACK_PALETTE = ["#6C8CFF", "#3E4E8C", "#A55CFF", "#E6EAF2"]
 
@@ -276,7 +278,15 @@ class LocalLowPower3DProvider(AIImage3DProvider):
         palette = resolve_palette(spec, references)
         scale = max(0.5, min(2.0, (spec.height_cm or 160) / 160.0))
         primitives = build_primitives(spec, palette)
-        data = build_glb(primitives, scale=scale)
+
+        # Phase 2.6-C: optional skinned output (default OFF keeps old behavior).
+        # The bone tree is built in the same model space as the primitives, so
+        # the nearest-bone binding (Phase 2.6-B) stays consistent.
+        if config.LOCAL3D_RIG_ENABLED:
+            bones = build_bone_tree(spec)
+            data = build_glb(primitives, scale=scale, bones=bones)
+        else:
+            data = build_glb(primitives, scale=scale)
 
         on_progress(total, total, "生成完成")
         return data
