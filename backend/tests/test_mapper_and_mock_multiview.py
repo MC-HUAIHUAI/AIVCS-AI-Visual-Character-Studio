@@ -95,6 +95,33 @@ class MapperPerViewTest(unittest.TestCase):
         self.assertEqual(model.character_type, "anthro")
         self.assertEqual(model.species.primary, "fox")
 
+    def test_asset_patch_normalized(self):
+        raw = {
+            "provider_id": "kimi",
+            "spec_patch": {
+                "assetPatch": {
+                    "hairColor": "#111222",
+                    "eyeColor": "#333444",
+                    "skinColor": "#E8CDB3",
+                    "outfitColors": ["#FF0000", "red"],
+                    "backPattern": " 背部白色条纹 ",
+                }
+            },
+        }
+        out = vision_spec_mapper.normalize(raw)
+        ap = out.spec_patch.asset_patch
+        self.assertIsNotNone(ap)
+        self.assertEqual(ap.hair_color, "#111222")
+        self.assertEqual(ap.eye_color, "#333444")
+        self.assertEqual(ap.skin_color, "#E8CDB3")
+        self.assertEqual(ap.outfit_colors, ["#FF0000"])
+        self.assertEqual(ap.back_pattern, "背部白色条纹")
+
+    def test_asset_patch_invalid_values_dropped(self):
+        raw = {"provider_id": "kimi", "spec_patch": {"assetPatch": {"hairColor": "nope", "outfitColors": []}}}
+        out = vision_spec_mapper.normalize(raw)
+        self.assertIsNone(out.spec_patch.asset_patch)
+
 
 class MockMultiViewTest(unittest.TestCase):
     def run_provider(self, refs):

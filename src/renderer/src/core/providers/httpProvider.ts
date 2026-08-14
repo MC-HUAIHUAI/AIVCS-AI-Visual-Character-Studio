@@ -1,6 +1,6 @@
 import type { AIImage3DProvider, GeneratedModelResult, GenerationProgress } from './aiProvider'
 import type { GenerationAbortSignal } from './aiProvider'
-import type { CharacterSpec, ModelFormat } from '@shared/types'
+import type { CharacterAsset, CharacterSpec, ModelFormat } from '@shared/types'
 import type { VisionImageInput } from './visionProvider'
 import type { GenerationRequest, JobDto } from '../spec/generationLogic'
 import { isTerminal, safeErrorMessage } from '../spec/generationLogic'
@@ -25,6 +25,8 @@ export interface CreateGenerationRequest {
   spec: CharacterSpec
   references: GenerationRequest['references']
   timeoutSeconds?: number
+  /** Phase 3-3: optional render-layer (derived CharacterAsset). */
+  characterAsset?: CharacterAsset
 }
 
 export async function createGenerationJob(req: CreateGenerationRequest): Promise<{ jobId: string }> {
@@ -35,7 +37,8 @@ export async function createGenerationJob(req: CreateGenerationRequest): Promise
       provider: req.backendProviderId ?? 'mock',
       spec: req.spec,
       references: req.references,
-      timeoutSeconds: req.timeoutSeconds ?? DEFAULT_GENERATION_TIMEOUT_SECONDS
+      timeoutSeconds: req.timeoutSeconds ?? DEFAULT_GENERATION_TIMEOUT_SECONDS,
+      characterAsset: req.characterAsset ?? undefined
     })
   })
   if (!res.ok) {

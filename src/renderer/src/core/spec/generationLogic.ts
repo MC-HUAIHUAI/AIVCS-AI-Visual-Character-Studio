@@ -1,4 +1,4 @@
-import type { CharacterSpec, GenerationJob, GenerationJobStep, GlbStats, ImageAsset, ModelAsset, ModelFormat } from '@shared/types'
+import type { CharacterAsset, CharacterSpec, GenerationJob, GenerationJobStep, GlbStats, ImageAsset, ModelAsset, ModelFormat } from '@shared/types'
 import type { VisionImageInput } from '../providers/visionProvider'
 
 /**
@@ -32,6 +32,8 @@ export interface GenerationRequest {
   spec: CharacterSpec
   references: VisionImageInput[]
   timeoutSeconds?: number
+  /** Phase 3-3: optional render-layer (derived CharacterAsset). */
+  characterAsset?: CharacterAsset
 }
 
 export function referencesWithinLimit(refs: unknown[]): boolean {
@@ -41,7 +43,8 @@ export function referencesWithinLimit(refs: unknown[]): boolean {
 export function buildGenerationRequest(
   spec: CharacterSpec,
   references: ImageAsset[],
-  timeoutSeconds?: number
+  timeoutSeconds?: number,
+  characterAsset?: CharacterAsset
 ): GenerationRequest {
   return {
     spec,
@@ -50,7 +53,8 @@ export function buildGenerationRequest(
       dataUrl: r.dataUrl,
       view: r.view ?? null
     })),
-    timeoutSeconds
+    timeoutSeconds,
+    characterAsset
   }
 }
 

@@ -99,6 +99,13 @@ specPatch 允许的字段与取值（camelCase）：
     "markings": [],
     "palette": ["#RRGGBB"]
   }
+- assetPatch: {
+    "hairColor": "#RRGGBB" 或 null,
+    "eyeColor": "#RRGGBB" 或 null,
+    "skinColor": "#RRGGBB" 或 null,
+    "outfitColors": ["#RRGGBB"],
+    "backPattern": "背面花纹/图案的简短文字描述" 或 null
+  }
 
 规则：
 1. 无法确定物种时：species.primary 必须为 "custom"，species.confidence 必须为 null，并在 warnings 中写明"无法确定角色物种，请选择或补充参考图"。
@@ -107,7 +114,8 @@ specPatch 允许的字段与取值（camelCase）：
 4. 只输出 specPatch / perView / confidence / notes / warnings 五个顶层字段。不要输出 sourceImageIds、visionAnalysis、project、assets、mesh 等任何其他字段。
 5. perView 每一项的 view 必须与输入视角一致，不要输出 sourceImageId（服务端会绑定）。
 6. palette 只接受 #RRGGBB 格式，其他格式一律丢弃。
-7. 人类与二次元人类都是合法角色类型，不要强行把二次元角色判成 "human"。
+7. assetPatch 放在 specPatch 内，按视角输出（perView 里也放各自的 specPatch.assetPatch）：正面可给发色/瞳色/肤色/服装，背面可给 backPattern 与背面配色；无法确定时置 null 或省略。
+8. 人类与二次元人类都是合法角色类型，不要强行把二次元角色判成 "human"。
 """
 
 USER_FINAL_INSTRUCTION = "请基于以上所有视角，按 system 提示词要求输出 JSON。"

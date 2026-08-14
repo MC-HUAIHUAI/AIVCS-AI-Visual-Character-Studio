@@ -14,15 +14,23 @@ import base64
 import hashlib
 import struct
 import zlib
+from dataclasses import dataclass
 
 from .base import AIImage3DProvider, CancellationToken, ProgressCallback, ProviderCancelledError
 from .. import config
+from ..schemas.asset import CharacterAsset
 from ..schemas.character import CharacterSpec
 from ..schemas.vision import VisionImageInput
 from ..services.glb_builder import Primitive, build_glb
 from ..services.rig_builder import build_bone_tree
 
 FALLBACK_PALETTE = ["#6C8CFF", "#3E4E8C", "#A55CFF", "#E6EAF2"]
+
+_SKIN_FALLBACK = "#E8CDB3"
+_DARK_FALLBACK = "#20242E"
+
+# Body types that can carry the conditional minimal eye primitives.
+_EYE_BODY_TYPES = ("humanoid", "biped-anthro")
 
 
 # --------------------------------------------------------------------------- #
@@ -146,15 +154,88 @@ def resolve_palette(spec: CharacterSpec, references: list[VisionImageInput]) -> 
 
 
 # --------------------------------------------------------------------------- #
-# Topology builder (deterministic)
+# Render colors (Phase 3-3): CharacterAsset-driven semantic color roles.
 # --------------------------------------------------------------------------- #
 
-def build_primitives(spec: CharacterSpec, palette: list[str]) -> list[Primitive]:
+
+@dataclass(frozen=True)
+class RenderColors:
+    primary: str
+    secondary: str
+    accent: str
+    dark: str
+    skin: str
+    hair: str
+    eye: str | None = None
+
+
+def resolve_render_colors(
+    spec: CharacterSpec,
+    palette: list[str],
+    asset: CharacterAsset | None = None,
+) -> RenderColors:
+    """Resolve the semantic render colors for the primitive topology.
+
+    Deterministic. When no CharacterAsset is provided (old projects / demo) the
+    result is byte-compatible with the pre-Phase-3 color resolution:
+
+      primary   = palette[0] (fallback FALLBACK_PALETTE[0])
+      secondary = palette[1] (fallback primary)
+      accent    = palette[2] (fallback secondary)
+      dark      = palette[3] (fallback _DARK_FALLBACK)
+      skin      = _SKIN_FALLBACK
+      hair      = dark
+      eye       = None
+
+    With a CharacterAsset:
+      outfitColors[0] -> primary, [1] -> secondary, [2] -> accent
+      (missing items fall back to the palette-derived values, one by one)
+      skinColor -> skin, hairColor -> hair, eyeColor -> eye
+    provenance (observed/derived) never affects geometry or determinism.
+    """
     primary = palette[0] if palette else FALLBACK_PALETTE[0]
     secondary = palette[1] if len(palette) > 1 else primary
     accent = palette[2] if len(palette) > 2 else secondary
-    dark = palette[3] if len(palette) > 3 else "#20242E"
-    skin = "#E8CDB3"
+    dark = palette[3] if len(palette) > 3 else _DARK_FALLBACK
+    skin = _SKIN_FALLBACK
+    hair = dark
+    eye = None
+
+    if asset is not None:
+        if asset.skin_color:
+            skin = asset.skin_color
+        if asset.hair_color:
+            hair = asset.hair_color
+        if asset.eye_color:
+            eye = asset.eye_color
+        outfit = asset.outfit_colors or []
+        if outfit:
+            primary = outfit[0]
+        if len(outfit) > 1:
+            secondary = outfit[1]
+        if len(outfit) > 2:
+            accent = outfit[2]
+
+    return RenderColors(primary=primary, secondary=secondary, accent=accent, dark=dark, skin=skin, hair=hair, eye=eye)
+
+
+# --------------------------------------------------------------------------- #
+# Topology builder (deterministic)
+# --------------------------------------------------------------------------- #
+
+def build_primitives(
+    spec: CharacterSpec,
+    palette: list[str],
+    render_colors: RenderColors | None = None,
+) -> list[Primitive]:
+    rc = render_colors or resolve_render_colors(spec, palette)
+    primary = rc.primary
+    secondary = rc.secondary
+    accent = rc.accent
+    dark = rc.dark
+    skin = rc.skin
+    hair = rc.hair
+    eye = rc.eye
 
     anatomy = spec.anatomy
     parts: list[Primitive] = []
@@ -225,7 +306,7 @@ def build_primitives(spec: CharacterSpec, palette: list[str]) -> list[Primitive]
     parts.append(Primitive("box", (0.14, 0.45, 0.14), center=(-0.38, 0.95, 0), color=secondary))  # arm L
     parts.append(Primitive("box", (0.14, 0.45, 0.14), center=(0.38, 0.95, 0), color=secondary))  # arm R
     parts.append(Primitive("sphere", radius=0.28, center=(0, 1.55, 0), color=skin))  # head
-    parts.append(Primitive("box", (0.34, 0.08, 0.34), center=(0, 1.78, -0.05), color=dark))  # hair cap
+    parts.append(Primitive("box", (0.34, 0.08, 0.34), center=(0, 1.78, -0.05), color=hair))  # hair cap
     if anatomy.snout or body_type == "biped-anthro":
         parts.append(Primitive("box", (0.18, 0.12, 0.16), center=(0, 1.52, 0.28), color=skin))
         parts.append(Primitive("box", (0.05, 0.04, 0.03), center=(0, 1.52, 0.37), color=dark))
@@ -240,6 +321,10 @@ def build_primitives(spec: CharacterSpec, palette: list[str]) -> list[Primitive]
         parts.append(Primitive("box", (0.5, 0.35, 0.05), center=(0.7, 1.0, 0.05), color=accent, rotation=(0, 0, -0.5)))
     if anatomy.tail != "none":
         parts.append(Primitive("box", (0.18, 0.18, 0.5), center=(0, 0.6, -0.3), color=accent, rotation=(0.5, 0, 0)))
+    # Phase 3-3: conditional minimal eyes - only humanoid/biped + eyeColor present.
+    if body_type in _EYE_BODY_TYPES and eye:
+        parts.append(Primitive("box", (0.05, 0.04, 0.02), center=(-0.11, 1.56, 0.24), color=eye))  # eye L
+        parts.append(Primitive("box", (0.05, 0.04, 0.02), center=(0.11, 1.56, 0.24), color=eye))  # eye R
     return parts
 
 
@@ -263,6 +348,7 @@ class LocalLowPower3DProvider(AIImage3DProvider):
         references: list[VisionImageInput],
         on_progress: ProgressCallback,
         cancel_event: CancellationToken | None = None,
+        character_asset: CharacterAsset | None = None,
     ) -> bytes:
         steps = ["解析角色规格", "提取参考图配色", "生成低模拓扑", "应用材质", "导出 GLB"]
         total = len(steps)
@@ -277,7 +363,8 @@ class LocalLowPower3DProvider(AIImage3DProvider):
 
         palette = resolve_palette(spec, references)
         scale = max(0.5, min(2.0, (spec.height_cm or 160) / 160.0))
-        primitives = build_primitives(spec, palette)
+        render_colors = resolve_render_colors(spec, palette, character_asset)
+        primitives = build_primitives(spec, palette, render_colors)
 
         # Phase 2.6-C: optional skinned output (default OFF keeps old behavior).
         # The bone tree is built in the same model space as the primitives, so

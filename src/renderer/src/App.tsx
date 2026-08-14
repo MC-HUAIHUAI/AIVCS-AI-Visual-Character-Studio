@@ -5,6 +5,7 @@ import Viewport from './components/Viewport'
 import AIAssistantPanel from './components/AIAssistantPanel'
 import ProgressPanel from './components/ProgressPanel'
 import SettingsDialog from './components/SettingsDialog'
+import Portrait2DPanel from './components/Portrait2DPanel'
 import { useUIStore } from './store/uiStore'
 
 export default function App(): JSX.Element {
@@ -28,6 +29,7 @@ export default function App(): JSX.Element {
       </div>
       <ProgressPanel />
       <SettingsDialog />
+      <Portrait2DPanel />
     </div>
   )
 }

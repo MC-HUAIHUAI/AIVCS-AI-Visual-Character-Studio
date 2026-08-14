@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { CharacterSpec, ImageAsset, ModelAsset, ProjectData } from '@shared/types'
+import type { CharacterAsset, CharacterSpec, ImageAsset, ModelAsset, ProjectData } from '@shared/types'
 import {
   createProject,
   importImages as importImagesViaIpc,
@@ -7,6 +7,7 @@ import {
   normalizeSpec,
   saveProject as saveProjectViaIpc
 } from '../core/project/projectManager'
+import { applyAssetPatch, deriveCharacterAsset } from '../core/spec/characterAssetLogic'
 
 interface ProjectState {
   project: ProjectData
@@ -24,6 +25,8 @@ interface ProjectState {
   addModel: (model: ModelAsset, buffer?: ArrayBuffer) => void
   removeModel: (id: string) => void
   updateSpec: (patch: Partial<CharacterSpec>) => void
+  /** Phase 3-2: merge a confirmed vision assetPatch into project.characterAsset. */
+  applyCharacterAssetPatch: (patch: Partial<CharacterAsset>) => void
   save: () => Promise<boolean>
   load: () => Promise<void>
   setDirty: (dirty: boolean) => void
@@ -108,6 +111,16 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         spec: { ...project.spec, ...patch, updatedAt: new Date().toISOString() },
         updatedAt: new Date().toISOString()
       },
+      isDirty: true
+    })
+  },
+
+  applyCharacterAssetPatch: (patch) => {
+    const { project } = get()
+    const base = project.characterAsset ?? deriveCharacterAsset(project.spec)
+    const next = applyAssetPatch(base, patch)
+    set({
+      project: { ...project, characterAsset: next, updatedAt: new Date().toISOString() },
       isDirty: true
     })
   },

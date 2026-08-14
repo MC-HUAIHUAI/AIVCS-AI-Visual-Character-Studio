@@ -19,6 +19,8 @@
   "include": [
     "../src/renderer/src/core/spec/visionReviewLogic.ts",
     "../src/renderer/src/core/spec/applyVisionResult.ts",
+    "../src/renderer/src/core/spec/characterAssetLogic.ts",
+    "../src/renderer/src/core/spec/portrait2dLogic.ts",
     "../src/renderer/src/core/spec/generationLogic.ts",
     "../src/renderer/src/core/spec/modelInfoLogic.ts",
     "../src/renderer/src/core/spec/vrmExportLogic.ts",

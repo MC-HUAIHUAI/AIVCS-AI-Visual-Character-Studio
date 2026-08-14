@@ -105,6 +105,21 @@ class VisionAppearancePatch(_CamelModel):
     palette: list[str] | None = None
 
 
+class VisionAssetPatch(_CamelModel):
+    """Vision-observed appearance patch (Phase 3-2). All fields optional.
+
+    front/back observations stay separate per view; the CrossViewResolver
+    merges them. Values are only suggestions - they must pass the review /
+    confirmation flow before landing in the CharacterAsset.
+    """
+
+    hair_color: str | None = Field(default=None, alias="hairColor")
+    eye_color: str | None = Field(default=None, alias="eyeColor")
+    skin_color: str | None = Field(default=None, alias="skinColor")
+    outfit_colors: list[str] | None = Field(default=None, alias="outfitColors")
+    back_pattern: str | None = Field(default=None, alias="backPattern")
+
+
 class VisionPerViewMeta(_CamelModel):
     view: ReferenceView
     source_image_id: str = Field(alias="sourceImageId")
@@ -173,6 +188,8 @@ class VisionSpecPatch(_CamelModel):
     fur: VisionFurPatch | None = None
     appearance: VisionAppearancePatch | None = None
     vision_analysis: VisionAnalysisMeta | None = Field(default=None, alias="visionAnalysis")
+    # Phase 3-2: observed appearance suggestions (optional, backward compatible).
+    asset_patch: VisionAssetPatch | None = Field(default=None, alias="assetPatch")
 
 
 class VisionAnalysisResponse(_CamelModel):
@@ -186,3 +203,5 @@ class VisionAnalysisResponse(_CamelModel):
     # the CrossViewResolver, never taken from the model.
     per_view: list[ViewAnalysis] | None = Field(default=None, alias="perView")
     conflicts: list[ViewConflict] | None = Field(default=None, alias="conflicts")
+    # Phase 3-2: observed appearance suggestions (optional).
+    asset_patch: VisionAssetPatch | None = Field(default=None, alias="assetPatch")

@@ -66,6 +66,10 @@ MANAGED_FIELDS: dict[tuple[str, ...], str] = {
     ("fur", "style"): "enum",
     ("fur", "length"): "enum",
     ("appearance", "baseColor"): "enum",
+    # Phase 3-2 assetPatch scalar fields (conflict detection by value).
+    ("assetPatch", "hairColor"): "enum",
+    ("assetPatch", "eyeColor"): "enum",
+    ("assetPatch", "skinColor"): "enum",
 }
 for _key in ANATOMY_BOOLS:
     MANAGED_FIELDS[("anatomy", _key)] = "bool"
@@ -82,6 +86,9 @@ PASS_THROUGH_PATHS = (
     ("appearance", "patterns"),
     ("appearance", "markings"),
     ("appearance", "palette"),
+    # Phase 3-2 assetPatch pass-through (single-source, no conflict).
+    ("assetPatch", "outfitColors"),
+    ("assetPatch", "backPattern"),
 )
 
 FIELD_LABELS: dict[str, str] = {
@@ -113,6 +120,11 @@ FIELD_LABELS: dict[str, str] = {
     "anatomy.fins": "鳍",
     "anatomy.tentacles": "触手",
     "anatomy.extraLimbs": "额外肢体",
+    "assetPatch.hairColor": "发色",
+    "assetPatch.eyeColor": "瞳色",
+    "assetPatch.skinColor": "肤色",
+    "assetPatch.outfitColors": "服装配色",
+    "assetPatch.backPattern": "背面花纹",
 }
 
 

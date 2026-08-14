@@ -61,3 +61,20 @@ class GlbStats(_CamelModel):
     # Phase 2.7-D: whether the GLB carries a `skins` entry (skinned mesh).
     # Optional field; old stats without it remain valid.
     skinned: bool = False
+
+
+class CharacterAsset(_CamelModel):
+    """Derived renderable appearance (Phase 3-1) - mirror of src/shared/types.ts."""
+
+    version: int = 1
+    palette: list[str] = Field(default_factory=list)
+    base_color: str | None = Field(default=None, alias="baseColor")
+    secondary_colors: list[str] = Field(default_factory=list, alias="secondaryColors")
+    fur_colors: list[str] = Field(default_factory=list, alias="furColors")
+    fur_patterns: list[str] = Field(default_factory=list, alias="furPatterns")
+    hair_color: str | None = Field(default=None, alias="hairColor")
+    eye_color: str | None = Field(default=None, alias="eyeColor")
+    skin_color: str | None = Field(default=None, alias="skinColor")
+    outfit_colors: list[str] = Field(default_factory=list, alias="outfitColors")
+    back_pattern: str | None = Field(default=None, alias="backPattern")
+    source: dict[str, str] = Field(default_factory=dict)

@@ -12,6 +12,7 @@ interface UIState {
   /** Phase 2.4-D-pre: reserved external 3D provider contract (in-memory only). */
   external3d: External3DProviderSettings
   settingsOpen: boolean
+  portrait2dOpen: boolean
 
   checkBackend: () => Promise<boolean>
   setProviderId: (id: string) => void
@@ -21,6 +22,8 @@ interface UIState {
   setExternal3D: (patch: Partial<External3DProviderSettings>) => void
   openSettings: () => void
   closeSettings: () => void
+  openPortrait2D: () => void
+  closePortrait2D: () => void
 }
 
 export const useUIStore = create<UIState>((set, get) => ({
@@ -30,6 +33,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   selectedReferenceIds: [],
   external3d: { ...DEFAULT_EXTERNAL3D_SETTINGS },
   settingsOpen: false,
+  portrait2dOpen: false,
 
   checkBackend: async () => {
     const online = await backendHealth()
@@ -59,5 +63,9 @@ export const useUIStore = create<UIState>((set, get) => ({
 
   openSettings: () => set({ settingsOpen: true }),
 
-  closeSettings: () => set({ settingsOpen: false })
+  closeSettings: () => set({ settingsOpen: false }),
+
+  openPortrait2D: () => set({ portrait2dOpen: true }),
+
+  closePortrait2D: () => set({ portrait2dOpen: false })
 }))

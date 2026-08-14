@@ -30,5 +30,15 @@ async def vision_analyze(request: VisionRequest):
         resolved = cross_view_resolver.resolve_cross_view(mapped.per_view)
         mapped.spec_patch = vision_spec_mapper.validate_spec_patch_dict(resolved["unifiedPatch"])
         mapped.conflicts = resolved["conflicts"] or None
+        # Phase 3-2: surface the merged assetPatch to the client (goes through
+        # the review/confirmation flow before reaching the CharacterAsset).
+        asset_patch = resolved["unifiedPatch"].get("assetPatch")
+        if isinstance(asset_patch, dict):
+            from ..schemas.vision import VisionAssetPatch
+
+            try:
+                mapped.asset_patch = VisionAssetPatch.model_validate(asset_patch)
+            except Exception:  # noqa: BLE001 - invalid patch is dropped, never crashes
+                mapped.asset_patch = None
 
     return mapped

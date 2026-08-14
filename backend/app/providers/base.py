@@ -14,6 +14,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Callable
 
+from ..schemas.asset import CharacterAsset
 from ..schemas.character import CharacterSpec
 from ..schemas.vision import VisionImageInput
 
@@ -56,11 +57,14 @@ class AIImage3DProvider(ABC):
         references: list[VisionImageInput],
         on_progress: ProgressCallback,
         cancel_event: CancellationToken | None = None,
+        character_asset: CharacterAsset | None = None,
     ) -> bytes:
         """Run the pipeline and return the raw GLB bytes.
 
-        Implementations should poll `cancel_event.is_cancelled` between steps and
-        raise ProviderCancelledError when the user cancels the job.
+        `character_asset` is an optional render-layer (Phase 3-3). Providers
+        that do not consume it must simply ignore it. Implementations should
+        poll `cancel_event.is_cancelled` between steps and raise
+        ProviderCancelledError when the user cancels the job.
         """
         raise NotImplementedError
 

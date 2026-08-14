@@ -60,7 +60,10 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
 
   runGeneration: async (spec, references, providerId, timeoutSeconds) => {
     const provider = getProvider(providerId)
-    const request = buildGenerationRequest(spec, references, timeoutSeconds)
+    // Phase 3-3: pass the project's derived CharacterAsset as the render layer
+    // (data only - the job state machine is unchanged).
+    const characterAsset = useProjectStore.getState().project.characterAsset
+    const request = buildGenerationRequest(spec, references, timeoutSeconds, characterAsset)
     const context: RunContext = { request, providerId, signal: { aborted: false } }
 
     if (!referencesWithinLimit(references)) {
@@ -161,7 +164,8 @@ async function backendFlow(
       backendProviderId,
       spec: context.request.spec,
       references: context.request.references,
-      timeoutSeconds: context.request.timeoutSeconds
+      timeoutSeconds: context.request.timeoutSeconds,
+      characterAsset: context.request.characterAsset
     })
     context.backendJobId = created.jobId
 

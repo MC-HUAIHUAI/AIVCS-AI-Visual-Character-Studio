@@ -80,6 +80,7 @@ class RealAIImage3DProvider(AIImage3DProvider):
         references: list[VisionImageInput],
         on_progress: ProgressCallback,
         cancel_event: CancellationToken | None = None,
+        character_asset=None,
     ) -> bytes:
         total = len(STEPS)
         notified = False

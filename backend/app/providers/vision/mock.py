@@ -35,7 +35,10 @@ class MockVisionProvider(AIVisionProvider):
             {
                 "view": item.view if item.view else "front",
                 "source_image_id": item.image_id,
-                "spec_patch": {"characterType": "human"},
+                "spec_patch": {
+                    "characterType": "human",
+                    "assetPatch": {},
+                },
                 "confidence": 0.1,
                 "notes": ["Mock 模式：未真正分析图片"],
                 "warnings": ["无法确定角色物种，请选择或补充参考图。"],
@@ -44,7 +47,7 @@ class MockVisionProvider(AIVisionProvider):
         ]
 
         return {
-            "spec_patch": {"character_type": "human"},
+            "spec_patch": {"character_type": "human", "asset_patch": {}},
             "per_view": per_view,
             "confidence": 0.1,
             "notes": ["Mock 模式：未真正分析图片"],

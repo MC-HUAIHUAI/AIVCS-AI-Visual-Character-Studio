@@ -215,7 +215,32 @@ def normalize_spec_patch(raw_patch) -> dict:
                 "confidence": _clamp_float(vision_analysis.get("confidence"), 0.0, 1.0),
             }
 
+    # Phase 3-2: observed appearance patch (suggestions only).
+    asset_patch = patch.get("assetPatch")
+    if isinstance(asset_patch, dict):
+        normalized_asset = _normalize_asset_patch(asset_patch)
+        if normalized_asset:
+            spec["assetPatch"] = normalized_asset
+
     return spec
+
+
+def _normalize_asset_patch(asset_patch: dict) -> dict:
+    """Clamp/validate an assetPatch into safe camelCase values."""
+    out: dict = {}
+    for key in ("hairColor", "eyeColor", "skinColor"):
+        value = asset_patch.get(key)
+        if isinstance(value, str) and _HEX_RE.match(value):
+            out[key] = value
+    outfit = asset_patch.get("outfitColors")
+    if isinstance(outfit, list):
+        items = [c for c in outfit if isinstance(c, str) and _HEX_RE.match(c)]
+        if items:
+            out["outfitColors"] = items
+    back = asset_patch.get("backPattern")
+    if isinstance(back, str) and back.strip():
+        out["backPattern"] = back.strip()
+    return out
 
 
 def normalize_view(item) -> ViewAnalysis | None:

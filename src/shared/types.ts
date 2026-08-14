@@ -73,6 +73,102 @@ export interface AppearanceProfile {
   palette?: string[]
 }
 
+/* ------------------------------------------------------------------------ */
+/* CharacterAsset - derived renderable appearance (Phase 3-1)                */
+/* ------------------------------------------------------------------------ */
+
+/** Provenance of a CharacterAsset field. */
+export type AssetSource = 'observed' | 'derived' | 'none'
+
+/**
+ * Derived, renderable structured appearance - an intermediate layer between
+ * the CharacterSpec (the single semantic source, unchanged) and any 3D/2D
+ * output. Values are either derived deterministically from the CharacterSpec
+ * (source 'derived'), written from a user-confirmed vision assetPatch (source
+ * 'observed'), or absent (source 'none'). This is NOT a replacement for the
+ * CharacterSpec and is not wired to real 3D/2D output yet.
+ */
+export interface CharacterAsset {
+  version: 1
+  palette: string[]
+  baseColor: string | null
+  secondaryColors: string[]
+  furColors: string[]
+  furPatterns: string[]
+  hairColor: string | null
+  eyeColor: string | null
+  skinColor: string | null
+  outfitColors: string[]
+  backPattern: string | null
+  /** Per-field provenance keyed by CharacterAsset field name. */
+  source: Record<string, AssetSource>
+}
+
+/** Vision-observed appearance patch (Phase 3-2). All fields optional. */
+export interface AssetPatch {
+  hairColor?: string | null
+  eyeColor?: string | null
+  skinColor?: string | null
+  outfitColors?: string[]
+  backPattern?: string | null
+}
+
+/* ------------------------------------------------------------------------ */
+/* 2D layered portrait (Phase 3-4)                                           */
+/* ------------------------------------------------------------------------ */
+
+export type Portrait2DLayerId =
+  | 'body'
+  | 'outfit'
+  | 'face'
+  | 'eyes'
+  | 'hair'
+  | 'accessory'
+
+export interface Portrait2DLayer {
+  id: Portrait2DLayerId
+  /** z-order; higher draws on top. Fixed per layer. */
+  order: number
+  /** Deterministic SVG fragment for this layer. */
+  svg: string
+  /** CharacterAsset field(s) that drove this layer (provenance preserved). */
+  sources: Record<string, AssetSource>
+}
+
+export interface Portrait2DDescriptor {
+  version: 1
+  kind: '2d-layered'
+  note: '2D layered / Live2D-ready，非 Cubism Runtime，不含 physics/parameter/motion'
+  width: number
+  height: number
+  layers: Portrait2DLayer[] // in draw order
+  frontView: boolean
+  /** Metadata only - never fabricated as a texture this stage. */
+  backPattern: string | null
+  /** Render-parameter source snapshot. */
+  assetSource: CharacterAsset
+  /** Reserved extension point for a future Cubism exporter. */
+  cubism: { present: false }
+}
+
+export interface Portrait2DResult {
+  /** Byte-deterministic SVG document. */
+  svg: string
+  descriptor: Portrait2DDescriptor
+  fileName: string
+  mime: 'image/svg+xml'
+}
+
+export interface Portrait2DUnsupported {
+  status: 'unsupported'
+  bodyType: string
+  reason: string
+}
+
+export type Portrait2DOutput =
+  | { status: 'ok'; result: Portrait2DResult }
+  | Portrait2DUnsupported
+
 export type TailMode = 'none' | 'single' | 'multiple'
 
 /**
@@ -439,6 +535,8 @@ export interface ProjectData {
   spec: CharacterSpec
   images: ImageAsset[]
   models: ModelAsset[]
+  /** Phase 3-1: derived renderable appearance (optional, backward compatible). */
+  characterAsset?: CharacterAsset
 }
 
 export interface ProjectSaveResult {

@@ -1,4 +1,4 @@
-import type { CharacterSpec, ViewConflict } from '@shared/types'
+import type { CharacterAsset, CharacterSpec, ViewConflict } from '@shared/types'
 import type { ConfirmedSpecPatch } from './applyVisionResult'
 
 /**
@@ -38,6 +38,7 @@ const FIELD_LABELS: Record<string, string> = {
   anatomy: '解剖特征',
   fur: '毛发',
   appearance: '外观配色',
+  assetPatch: '外观资产',
   style: '风格',
   gender: '性别',
   heightCm: '身高',
@@ -109,6 +110,17 @@ function valueLabelOf(field: string, value: unknown): string {
     const base = (value as { baseColor?: string }).baseColor
     return base ?? '外观'
   }
+  if (field === 'assetPatch' && value && typeof value === 'object') {
+    const patch = value as Record<string, unknown>
+    const parts: string[] = []
+    if (typeof patch.hairColor === 'string') parts.push(`发色 ${patch.hairColor}`)
+    if (typeof patch.eyeColor === 'string') parts.push(`瞳色 ${patch.eyeColor}`)
+    if (typeof patch.skinColor === 'string') parts.push(`肤色 ${patch.skinColor}`)
+    if (Array.isArray(patch.outfitColors) && patch.outfitColors.length > 0)
+      parts.push(`服装 ${patch.outfitColors.join('/')}`)
+    if (typeof patch.backPattern === 'string') parts.push('背纹')
+    return parts.length > 0 ? parts.join(' · ') : '外观资产'
+  }
   if (field === 'heightCm' && typeof value === 'number') return `${value} cm`
   return typeof value === 'string' ? ENUM_LABELS[field]?.[value] ?? value : JSON.stringify(value) ?? '—'
 }
@@ -161,7 +173,7 @@ function makeSuggestion(field: string, patch: ConfirmedSpecPatch, confidence: nu
  *   when ALL its conflicts are resolved.
  */
 export function buildReviewSuggestions(
-  specPatch: Partial<CharacterSpec>,
+  specPatch: Partial<CharacterSpec> & { assetPatch?: Partial<CharacterAsset> },
   conflicts: ViewConflict[],
   resolved: Record<string, number>,
   skipped: Record<string, boolean>,

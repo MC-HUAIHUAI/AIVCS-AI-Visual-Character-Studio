@@ -15,7 +15,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 import backend.app.jobs as jobs  # noqa: E402
 from backend.app.providers.base import CancellationToken, ProviderCancelledError  # noqa: E402
-from backend.app.providers.local_lowpower import LocalLowPower3DProvider, extract_palette  # noqa: E402
+from backend.app.providers.local_lowpower import (  # noqa: E402
+    LocalLowPower3DProvider,
+    build_primitives,
+    extract_palette,
+    resolve_render_colors,
+)
+from backend.app.schemas.asset import CharacterAsset  # noqa: E402
 from backend.app.schemas.character import CharacterSpec  # noqa: E402
 from backend.app.schemas.vision import VisionImageInput  # noqa: E402
 from backend.app.services.glb_builder import Primitive, build_glb  # noqa: E402
@@ -129,6 +135,80 @@ class LocalLowPowerTest(unittest.TestCase):
         self.assertEqual(self.provider.output_format, "glb")
         self.assertTrue(self.provider.supports_cancel)
         self.assertTrue(self.provider.supports_timeout)
+
+
+class RenderColorsTest(unittest.TestCase):
+    def spec(self, body_type="humanoid"):
+        return CharacterSpec(
+            id="s",
+            name="t",
+            style="stylized",
+            gender="female",
+            heightCm=160,
+            description="",
+            referenceImageIds=[],
+            tags=[],
+            createdAt="2026-01-01T00:00:00Z",
+            updatedAt="2026-01-01T00:00:00Z",
+            bodyType=body_type,
+            appearance={"palette": ["#111111", "#222222", "#333333", "#444444"]},
+        )
+
+    def test_no_asset_keeps_legacy_palette_semantics(self):
+        s = self.spec()
+        rc = resolve_render_colors(s, ["#111111", "#222222", "#333333", "#444444"])
+        self.assertEqual(rc.primary, "#111111")
+        self.assertEqual(rc.secondary, "#222222")
+        self.assertEqual(rc.accent, "#333333")
+        self.assertEqual(rc.dark, "#444444")
+        self.assertEqual(rc.skin, "#E8CDB3")
+        self.assertEqual(rc.hair, "#444444")  # hair defaults to dark
+        self.assertIsNone(rc.eye)
+
+    def test_asset_drives_colors_with_fallback(self):
+        s = self.spec()
+        rc = resolve_render_colors(s, ["#111111", "#222222", "#333333", "#444444"], CharacterAsset(
+            skin_color="#A0522D",
+            hair_color="#FFD700",
+            eye_color="#00BFFF",
+            outfit_colors=["#FF4500", "#228B22"],
+        ))
+        self.assertEqual(rc.skin, "#A0522D")
+        self.assertEqual(rc.hair, "#FFD700")
+        self.assertEqual(rc.eye, "#00BFFF")
+        self.assertEqual(rc.primary, "#FF4500")
+        self.assertEqual(rc.secondary, "#228B22")
+        self.assertEqual(rc.accent, "#333333")  # outfit[2] missing -> palette fallback
+        self.assertEqual(rc.dark, "#444444")
+
+    def test_asset_no_eye_does_not_add_eye_primitives(self):
+        s = self.spec()
+        rc = resolve_render_colors(s, [], CharacterAsset(hair_color="#FFD700"))
+        prims = build_primitives(s, [], rc)
+        self.assertIsNone(rc.eye)
+        self.assertEqual(len(prims), 9)  # humanoid base without eyes
+
+    def test_eye_primitives_added_only_for_humanoid_with_eye(self):
+        s = self.spec()
+        rc = resolve_render_colors(s, [], CharacterAsset(eye_color="#00BFFF"))
+        prims = build_primitives(s, [], rc)
+        self.assertEqual(len(prims), 11)  # 9 + 2 eyes
+
+    def test_eye_primitives_not_added_for_quadruped(self):
+        s = self.spec("quadruped")
+        rc = resolve_render_colors(s, [], CharacterAsset(eye_color="#00BFFF"))
+        prims = build_primitives(s, [], rc)
+        # quadruped base has 8 primitives; eyes must NOT be added
+        self.assertEqual(len(prims), 8)
+
+    def test_no_asset_byte_identical_baseline(self):
+        # Regression: without a CharacterAsset the GLB bytes must be unchanged.
+        s = self.spec()
+        palette = ["#111111", "#222222", "#333333", "#444444"]
+        legacy = build_glb(build_primitives(s, palette))
+        rc = resolve_render_colors(s, palette)
+        new = build_glb(build_primitives(s, palette, rc))
+        self.assertEqual(legacy, new)
 
 
 def _validate(data):

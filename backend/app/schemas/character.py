@@ -7,7 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .vision import VisionAnalysisMeta, VisionImageInput
-from .asset import GlbStats
+from .asset import CharacterAsset, GlbStats
 
 CharacterStyle = Literal["stylized", "realistic", "anime", "pixel"]
 CharacterGender = Literal["female", "male", "neutral"]
@@ -96,6 +96,9 @@ class GenerateRequest(_CamelModel):
     # provider can consume them. Reuses VisionImageInput - no second input type.
     references: list[VisionImageInput] = Field(default_factory=list)
     timeout_seconds: float | None = Field(default=None, alias="timeoutSeconds")
+    # Phase 3-3: optional render-layer (derived CharacterAsset) that drives the
+    # parameterized primitive topology. Backward compatible - old clients omit it.
+    character_asset: CharacterAsset | None = Field(default=None, alias="characterAsset")
 
     @field_validator("references")
     @classmethod

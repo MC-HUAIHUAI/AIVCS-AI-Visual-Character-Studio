@@ -30,13 +30,14 @@ interface ExportFormat {
 const EXPORT_FORMATS: Record<string, ExportFormat> = {
   '.glb': { name: 'glTF Binary', extensions: ['glb'] },
   '.gltf': { name: 'glTF', extensions: ['gltf'] },
-  '.vrm': { name: 'VRM', extensions: ['vrm'] }
+  '.vrm': { name: 'VRM', extensions: ['vrm'] },
+  '.svg': { name: 'SVG', extensions: ['svg'] }
 }
 
 /** Picks the export format descriptor from the requested default file name. */
 function exportFormatFor(defaultName: string): ExportFormat {
   const lower = defaultName.toLowerCase()
-  for (const ext of ['.vrm', '.glb', '.gltf']) {
+  for (const ext of ['.vrm', '.glb', '.gltf', '.svg']) {
     if (lower.endsWith(ext)) return EXPORT_FORMATS[ext]
   }
   return EXPORT_FORMATS['.glb']

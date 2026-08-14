@@ -47,13 +47,16 @@ export class VisionHttpProvider implements AIVisionProvider {
     const dto = (await res.json()) as VisionAnalysisDto
     onProgress?.(1)
 
+    const specPatch = dto.specPatch ?? {}
+    const assetPatch = specPatch.assetPatch as VisionAnalysisResult['assetPatch']
     return {
-      specPatch: dto.specPatch as VisionAnalysisResult['specPatch'],
+      specPatch: specPatch as VisionAnalysisResult['specPatch'],
       confidence: dto.confidence,
       notes: dto.notes,
       warnings: dto.warnings,
       sourceImageIds: dto.sourceImageIds,
-      providerId: dto.providerId
+      providerId: dto.providerId,
+      assetPatch
     }
   }
 }

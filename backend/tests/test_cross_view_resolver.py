@@ -115,6 +115,28 @@ class CrossViewResolverTest(unittest.TestCase):
         b = resolve_cross_view(views)
         self.assertEqual(a, b)
 
+    def test_asset_patch_merge_no_conflict(self):
+        views = [
+            va("front", {"assetPatch": {"hairColor": "#111222", "eyeColor": "#333444"}}, 0.9),
+            va("back", {"assetPatch": {"outfitColors": ["#FF0000"], "backPattern": "白色背纹"}}, 0.7),
+        ]
+        out = resolve_cross_view(views)
+        ap = out["unifiedPatch"]["assetPatch"]
+        self.assertEqual(ap["hairColor"], "#111222")
+        self.assertEqual(ap["outfitColors"], ["#FF0000"])
+        self.assertEqual(ap["backPattern"], "白色背纹")
+        self.assertEqual(out["conflicts"], [])
+
+    def test_asset_patch_color_conflict(self):
+        views = [
+            va("front", {"assetPatch": {"hairColor": "#111222"}}, 0.9),
+            va("back", {"assetPatch": {"hairColor": "#333444"}}, 0.8),
+        ]
+        out = resolve_cross_view(views)
+        self.assertEqual(out["unifiedPatch"]["assetPatch"]["hairColor"], "#111222")
+        fields = {c.field for c in out["conflicts"]}
+        self.assertIn("assetPatch.hairColor", fields)
+
     def test_empty_and_malformed_do_not_crash(self):
         self.assertEqual(resolve_cross_view([])["conflicts"], [])
         # Pydantic already rejects specPatch=None; malformed nested values must

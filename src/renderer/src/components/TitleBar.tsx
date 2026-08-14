@@ -22,6 +22,7 @@ export default function TitleBar(): JSX.Element {
   const selectedModelId = useProjectStore((s) => s.selectedModelId)
   const backendOnline = useUIStore((s) => s.backendOnline)
   const openSettings = useUIStore((s) => s.openSettings)
+  const openPortrait2D = useUIStore((s) => s.openPortrait2D)
   const [busy, setBusy] = useState(false)
 
   const selectedModel = models.find((m) => m.id === selectedModelId) ?? null
@@ -116,6 +117,13 @@ export default function TitleBar(): JSX.Element {
           }
         >
           {busy ? '导出中…' : '导出 VRM'}
+        </button>
+        <button
+          className="btn btn--ghost btn--sm"
+          onClick={openPortrait2D}
+          title="2D 分层立绘预览与导出（前端 SVG，非 Cubism Runtime）"
+        >
+          2D 立绘
         </button>
         <button className="btn btn--ghost btn--sm" onClick={openSettings}>
           设置

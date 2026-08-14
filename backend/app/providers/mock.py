@@ -71,6 +71,7 @@ class MockImage3DProvider(AIImage3DProvider):
         references: list[VisionImageInput],
         on_progress: ProgressCallback,
         cancel_event: CancellationToken | None = None,
+        character_asset=None,
     ) -> bytes:
         steps = _build_steps(spec)
         total = len(steps)

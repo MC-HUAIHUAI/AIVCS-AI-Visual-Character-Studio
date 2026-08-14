@@ -31,7 +31,7 @@ async def generate_image_to_3d(request: GenerateRequest):
     job = create_job(
         provider.name,
         lambda on_progress, cancel_event: provider.generate(
-            request.spec, request.references, on_progress, cancel_event
+            request.spec, request.references, on_progress, cancel_event, request.character_asset
         ),
         timeout_seconds=timeout,
         spec_hash=spec_hash(request.spec),

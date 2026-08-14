@@ -41,6 +41,7 @@ MODEL_PAIRS = [
     ("GlbCenter", "backend.app.schemas.asset", "GlbCenter"),
     ("MeshStat", "backend.app.schemas.asset", "MeshStat"),
     ("GlbStats", "backend.app.schemas.asset", "GlbStats"),
+    ("CharacterAsset", "backend.app.schemas.asset", "CharacterAsset"),
 ]
 
 

@@ -2,6 +2,7 @@ import type {
   AnatomyGraph,
   AppearanceProfile,
   BodyType,
+  CharacterAsset,
   CharacterGender,
   CharacterSpec,
   CharacterStyle,
@@ -26,6 +27,8 @@ export type ConfirmedSpecPatch = Partial<
   anatomy?: Partial<AnatomyGraph>
   fur?: Partial<FurProfile>
   appearance?: Partial<AppearanceProfile>
+  /** Phase 3-2: observed appearance suggestions (go through review/confirmation). */
+  assetPatch?: Partial<CharacterAsset>
 }
 
 export const CHARACTER_TYPES: readonly CharacterType[] = [

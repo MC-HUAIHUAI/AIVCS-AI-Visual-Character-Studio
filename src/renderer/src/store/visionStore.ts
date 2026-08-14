@@ -107,6 +107,12 @@ export const useVisionStore = create<VisionState>((set, get) => ({
     const safe = applyVisionResult(current, { ...suggestion.patch, visionAnalysis: meta })
     if (Object.keys(safe).length > 0) useProjectStore.getState().updateSpec(safe)
 
+    // Phase 3-2: a confirmed assetPatch lands in the CharacterAsset (derived
+    // renderable appearance) - it is NOT a CharacterSpec field.
+    if (suggestion.patch.assetPatch) {
+      useProjectStore.getState().applyCharacterAssetPatch(suggestion.patch.assetPatch)
+    }
+
     set({
       suggestions: suggestions.map((s) => (s.id === id ? { ...s, status: 'accepted' as const } : s))
     })

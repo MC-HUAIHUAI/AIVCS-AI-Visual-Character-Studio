@@ -1,4 +1,4 @@
-import type { CharacterSpec } from '@shared/types'
+import type { CharacterAsset, CharacterSpec } from '@shared/types'
 import type { ReferenceView } from '@shared/types'
 import type { ViewAnalysis, ViewConflict } from '@shared/types'
 
@@ -34,6 +34,8 @@ export interface VisionAnalysisResult {
   providerId?: string
   perView?: ViewAnalysis[]
   conflicts?: ViewConflict[]
+  /** Phase 3-2: observed appearance suggestions (optional, go through review). */
+  assetPatch?: Partial<CharacterAsset>
 }
 
 /**
