@@ -111,6 +111,18 @@ npm run dev
 - **真实厂商：尚未启用**。`backend/app/providers/remote/vendor.py` 为离线骨架——从环境变量读 Key（`AIVCS_REAL3D_API_KEY`，预留）、无默认真实 endpoint、未配置 Key 绝不注册、不发任何网络请求。接入真实厂商只需实现 `IRemote3DClient`，**不需要**改动 JobManager / ModelStore / generationStore。
 - **当前禁止自动联网**：无真实厂商配置时不发起任何远程 3D 请求；需厂商 API Key 且经授权后才能真实调用。
 
+## Phase 2.4-C — Tripo 适配离线骨架（当前状态）
+
+- **第一适配目标：Tripo（tripo3d.ai）**。选择理由：CN 可访问、基于 Trellis 的 image-to-3D、任务式 API（create→poll→download）与 `IRemote3DClient` 天然契合。
+- **预计输入/输出**：输入=统一 CharacterSpec + references[](≤4, dataUrl)；输出=合法 GLB（下载后经 `validate_glb` 校验，再交 ModelStore）。
+- **价格模型：未确认，不猜测**。需按 Tripo 官方文档核实后才能在启用真实调用前补录。
+- **API Key 环境变量**：`AIVCS_TRIPO_API_KEY`（预留，见 `backend/.env.example`）。未配置绝不注册/绝不联网。
+- **当前实现**：
+  - `backend/app/providers/remote/tripo_client.py` — 离线骨架：DTO（结构化占位，字段需官方文档确认）、纯映射函数（`map_tripo_status` / `tripo_task_to_remote_task` / `tripo_error_to_provider_error`）、方法 `NotImplementedError`（零网络、无默认 endpoint 自动调用）。
+  - `backend/app/providers/remote/offline_fake_client.py` — `OfflineFakeVendorClient`：完整离线假厂商（success / failed / timeout / cancelled / invalid / rate_limit / 用户取消），产出合法 GLB。
+  - 厂商差异全部封装在 client 内；**不修改** JobManager / ModelStore / CharacterSpec / generationStore。
+- **真实调用仍需人工授权**：本阶段及此前所有阶段均零真实 API、零联网、零充值。
+
 ## Mock 功能（模拟，非真实实现）
 
 - **Mock AI Provider**（前端本地 + 后端各一份）：按角色类型返回对应演示 GLB（人类→人形、非人类→兽人狐），模拟各阶段耗时与进度；无需网络、无需任何 AI API
