@@ -6,6 +6,9 @@ Takes a Phase 2.6 SKINNED GLB (bones= output) and emits a VRM 1.0 GLB:
     of the input unchanged;
   - synthesizes the required split limb bones (leftLowerArm/... /leftLowerLeg)
     as additional joints (appended), with bind-pose world-inverse IBM entries;
+  - for rigs without distinct hand/foot bones (biped-anthro) synthesizes the
+    required terminal bones (hands/feet) rooted at the limb bone, reusing the
+    limb bone's own world position as the deterministic endpoint (no tuning);
   - injects the VRMC_vrm extension (specVersion / meta / humanoid) per the
     official VRM 1.0 schema;
   - re-serializes the same BIN buffer (extended only by the new IBM matrices).
@@ -27,12 +30,13 @@ from .vrm_mapping import (
     REQUIRED_HUMAN_BONES,
     RIG_TO_VRM,
     SYNTHESIZE,
+    TERMINAL_SYNTHESIZE,
     VRM_SUPPORTED_BODY_TYPES,
 )
 
 SPEC_VERSION = "1.0"
 AUTHOR = "AIVCS"
-DEFAULT_LICENSE_URL = "https://vrm.dev/"
+DEFAULT_LICENSE_URL = "https://vrm.dev/licenses/1.0/"
 EXTENSION_NAME = "VRMC_vrm"
 
 _VRM_TO_RIG: dict[str, str] = {v: k for k, v in RIG_TO_VRM.items()}
@@ -110,14 +114,36 @@ def export_vrm(glb_bytes: bytes, body_type: str, model_name: str) -> bytes:
 
     world = _world_positions(nodes, parent_of)
 
+    # Hands / feet terminal bones. Some whitelisted rigs (biped-anthro) have no
+    # separate hand / foot bone - the limb bone is the terminal bone there, so
+    # the synthesized terminal reuses the limb bone's world position as its
+    # endpoint (deterministic, no tuning). Fixed iteration order keeps the
+    # node/joint/IBM indices stable.
+    terminal_world: dict[str, tuple[float, float, float]] = {}
+    pending: list[tuple[str, int, tuple[float, float, float]]] = []
+    pending_index: dict[str, int] = {}
+    for vrm_bone, parent_rig in TERMINAL_SYNTHESIZE.items():
+        rig = _VRM_TO_RIG[vrm_bone]
+        if rig in bone_to_node:
+            terminal_world[vrm_bone] = world[bone_to_node[rig]]
+            continue
+        parent_idx = bone_to_node.get(parent_rig)
+        if parent_idx is None:
+            raise VrmExportError(f"缺少骨骼 {parent_rig}（无法合成 {vrm_bone}）")
+        parent_pos = world[parent_idx]
+        pending_index[vrm_bone] = len(pending)
+        pending.append((vrm_bone, parent_idx, parent_pos))
+        terminal_world[vrm_bone] = parent_pos
+
     def node_pos(bone_id: str) -> tuple[float, float, float]:
         idx = bone_to_node.get(bone_id)
-        if idx is None:
-            raise VrmExportError(f"缺少骨骼 {bone_id}")
-        return world[idx]
+        if idx is not None:
+            return world[idx]
+        if bone_id in terminal_world:
+            return terminal_world[bone_id]
+        raise VrmExportError(f"缺少骨骼 {bone_id}")
 
     human_bones: dict[str, dict] = {}
-    to_synthesize: list[tuple[str, int, tuple[float, float, float]]] = []
 
     # Required bones.
     for vrm_bone in REQUIRED_HUMAN_BONES:
@@ -129,7 +155,11 @@ def export_vrm(glb_bytes: bytes, body_type: str, model_name: str) -> bytes:
             parent_idx = bone_to_node[parent_rig]
             parent_pos = world[parent_idx]
             end_pos = node_pos(end_rig)
-            to_synthesize.append((vrm_bone, parent_idx, _lerp(parent_pos, end_pos, 0.5)))
+            pending_index[vrm_bone] = len(pending)
+            pending.append((vrm_bone, parent_idx, _lerp(parent_pos, end_pos, 0.5)))
+        elif vrm_bone in pending_index:
+            # terminal bone already scheduled above (biped-anthro hands/feet)
+            pass
         else:
             raise VrmExportError(f"无法为 required 骨骼 {vrm_bone} 建立映射")
 
@@ -139,11 +169,12 @@ def export_vrm(glb_bytes: bytes, body_type: str, model_name: str) -> bytes:
         if rig is not None and rig in bone_to_node:
             human_bones.setdefault(vrm_bone, {"node": bone_to_node[rig]})
 
-    # Append synthesized nodes + joints + IBM entries.
-    if to_synthesize:
-        for vrm_bone, parent_idx, world_pos in to_synthesize:
+    # Append synthesized nodes + joints + IBM entries (fixed order).
+    if pending:
+        base = len(nodes)
+        for k, (vrm_bone, parent_idx, world_pos) in enumerate(pending):
             parent_world = world[parent_idx]
-            node_idx = len(nodes)
+            node_idx = base + k
             nodes.append(
                 {
                     "name": vrm_bone,
@@ -159,10 +190,10 @@ def export_vrm(glb_bytes: bytes, body_type: str, model_name: str) -> bytes:
             human_bones[vrm_bone] = {"node": node_idx}
 
         extra = struct.pack(
-            "<%df" % (16 * len(to_synthesize)),
+            "<%df" % (16 * len(pending)),
             *[
                 v
-                for _name, _pidx, p in to_synthesize
+                for _name, _pidx, p in pending
                 for v in (1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, -p[0], -p[1], -p[2], 1.0)
             ],
         )
@@ -170,7 +201,7 @@ def export_vrm(glb_bytes: bytes, body_type: str, model_name: str) -> bytes:
             buffer.append(0)
         ibm_view["byteLength"] += len(extra)
         buffer += extra
-        accessors[ibm_acc_idx]["count"] += len(to_synthesize)
+        accessors[ibm_acc_idx]["count"] += len(pending)
         gltf["buffers"][0]["byteLength"] += len(extra)
 
     skin["joints"] = joints

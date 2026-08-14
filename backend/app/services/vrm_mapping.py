@@ -90,3 +90,13 @@ SYNTHESIZE: dict[str, tuple[str, str]] = {
     "leftLowerLeg": ("leftLeg", "leftFoot"),
     "rightLowerLeg": ("rightLeg", "rightFoot"),
 }
+
+# Terminal hand/foot bones. Rigs that lack a distinct hand/foot bone
+# (biped-anthro) synthesize them at export time, rooted at the corresponding
+# limb bone. Deterministic order: hands first, then feet.
+TERMINAL_SYNTHESIZE: dict[str, str] = {
+    "leftHand": "leftArm",
+    "rightHand": "rightArm",
+    "leftFoot": "leftLeg",
+    "rightFoot": "rightLeg",
+}
