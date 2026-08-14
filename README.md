@@ -200,6 +200,17 @@ AIVCS 默认无需任何 API Key 即可运行：无 API 时使用本地 Mock / L
 - **自然语言编辑**：仅解析为结构化命令并展示，不实际修改模型
 - **毛发**：只以样式字段 + 步骤提示表现，无真实毛发网格
 
+## Windows 发布（Phase 3-5C）
+
+- **平台**：Windows x64。
+- **版本**：NSIS 安装版（`AIVCS-Setup-<ver>.exe`）+ Portable 版（`AIVCS-<ver>-portable.exe`）。
+- **首次运行**：无需任何 API Key。默认全部 Provider disabled、零外部网络请求；Vision 使用本地 Mock、3D 使用本地 LocalLowPower / Mock Remote、2D 立绘本地生成。
+- **API 配置**：第三方 API（Vision / External 3D）由用户在**设置（Settings）**中自行填写并启用；配置仅加密保存在本机 userData（Electron safeStorage），**不会写入项目文件 / 导出数据 / 日志**。
+- **未签名**：当前安装包未进行代码签名，Windows SmartScreen 可能提示“未知发布者”。仅用于测试/分发评估。
+- **真实第三方 AI 3D 尚未接入**：External 3D Provider 仅为配置占位（离线骨架），不产生任何真实请求、不消耗额度。
+- **backend 随包**：安装后应用自动启动随包的 `backend.exe`（仅监听 127.0.0.1:8321），退出时自动结束；模型与配置数据保存在用户目录（`%APPDATA%/aivcs/data`）。
+- 验证说明：`Windows clean-environment validation performed in an isolated local environment.`（当前尚未在第二台真实干净 Windows 上验证。）
+
 ## 尚未实现功能（后续 Phase）
 
 - 真实云端 Image-to-3D（`RealImage3DProviderPlaceholder` 已占位；`LocalLowPower3DProvider` 为本地 CPU 原型，非云端质量）

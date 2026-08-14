@@ -1,0 +1,38 @@
+appId: com.aivcs.app
+productName: AIVCS
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**/*
+  - package.json
+extraResources:
+  - from: dist/backend/backend.exe
+    to: backend/backend.exe
+  - from: assets/demo_character.glb
+    to: assets/demo_character.glb
+  - from: assets/demo_fox.glb
+    to: assets/demo_fox.glb
+asar: true
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  perMachine: false
+  createDesktopShortcut: true
+  shortcutName: AIVCS
+  uninstallDisplayName: AIVCS
+  deleteAppDataOnUninstall: false
+portable:
+  artifactName: ${productName}-${version}-portable.exe
+artifactName: ${productName}-Setup-${version}.${ext}
+npmRebuild: false
+electronDownload:
+  mirror: https://npmmirror.com/mirrors/electron/

@@ -2,6 +2,7 @@ import { app, BrowserWindow } from 'electron'
 import { join } from 'node:path'
 import { registerProjectHandlers } from './ipc'
 import { registerSettingsHandlers } from './settings'
+import { ensureBackend, stopBackend } from './backend'
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -52,10 +53,18 @@ app.whenReady().then(() => {
   registerProjectHandlers()
   registerSettingsHandlers()
   createWindow()
+  // Packaged: ensure the bundled backend.exe is up (dev relies on npm run backend).
+  if (app.isPackaged) {
+    void ensureBackend()
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
+})
+
+app.on('will-quit', () => {
+  stopBackend()
 })
 
 app.on('window-all-closed', () => {

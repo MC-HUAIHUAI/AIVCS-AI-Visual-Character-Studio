@@ -2,11 +2,21 @@
 
 No API keys are hardcoded. Real providers read their keys from the environment
 through provider-specific settings (see providers/vision/kimi.py). An optional
-backend/.env file (git-ignored) can hold these vars via python-dotenv.
+backend/.env file (git-ignored) can hold these vars via python-dotenv
+(developer-local fallback only - the release build never reads it).
+
+Writable data root (Phase 3-5C release):
+  - AIVCS_DATA_DIR wins when set (Electron main injects it in packaged mode);
+  - otherwise the platform user data dir (Windows %APPDATA%/aivcs/data);
+  - dev fallback: <repo>/backend/data.
+Runtime-writable paths (MODEL_DIR, RUNTIME_TOKEN_FILE, ...) are derived from it
+so packaged backend.exe (inside read-only app.asar/onefile temp dir) can still
+persist models and tokens.
 """
 
 import os
 import secrets
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
@@ -18,15 +28,40 @@ try:
 except ImportError:
     pass
 
-# Path to the bundled demo character, used by the mock provider.
-DEMO_MODEL_PATH = Path(
-    os.environ.get("AIVCS_DEMO_MODEL", ROOT / "assets" / "demo_character.glb")
-)
 
-# Demo non-human model (anthro fox) returned for creature characters.
-DEMO_FOX_MODEL_PATH = Path(
-    os.environ.get("AIVCS_DEMO_FOX_MODEL", ROOT / "assets" / "demo_fox.glb")
-)
+def _data_dir() -> Path:
+    env = os.environ.get("AIVCS_DATA_DIR")
+    if env:
+        return Path(env)
+    # Dev (source run): keep the historical repo-local data dir.
+    if not getattr(sys, "frozen", False):
+        return ROOT / "backend" / "data"
+    # Packaged (backend.exe via PyInstaller): writable user data dir.
+    if sys.platform == "win32":
+        base = os.environ.get("APPDATA") or str(Path.home() / "AppData" / "Roaming")
+        return Path(base) / "aivcs" / "data"
+    return Path.home() / ".aivcs" / "data"
+
+
+DATA_DIR = _data_dir()
+
+# Demo models: resolved in order of AIVCS_DEMO_MODEL env (packaged mode points
+# at resources/) -> a bundled resource dir next to the backend executable ->
+# dev assets/. Kept as paths; the mock provider reads them at request time.
+def _resource(name: str, env_name: str) -> Path:
+    env = os.environ.get(env_name)
+    if env:
+        return Path(env)
+    exe_dir = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else None
+    if exe_dir is not None:
+        candidate = exe_dir / "resources" / name
+        if candidate.exists():
+            return candidate
+    return ROOT / "assets" / name
+
+
+DEMO_MODEL_PATH = _resource("demo_character.glb", "AIVCS_DEMO_MODEL")
+DEMO_FOX_MODEL_PATH = _resource("demo_fox.glb", "AIVCS_DEMO_FOX_MODEL")
 
 # The provider selected on the backend when a client omits it.
 DEFAULT_PROVIDER = os.environ.get("AIVCS_DEFAULT_PROVIDER", "mock")
@@ -44,8 +79,8 @@ def _env_bool(name: str, default: bool) -> bool:
 # behavior byte-stable; enable for SkinnedMesh output (RigBuilder + skinning).
 LOCAL3D_RIG_ENABLED = _env_bool("AIVCS_LOCAL3D_RIG_ENABLED", False)
 
-# Persistent model output store.
-MODEL_DIR = Path(os.environ.get("AIVCS_MODEL_DIR", ROOT / "backend" / "data" / "models"))
+# Persistent model output store (writable).
+MODEL_DIR = Path(os.environ.get("AIVCS_MODEL_DIR", DATA_DIR / "models"))
 # Models older than this are deleted by cleanup (hours).
 MODEL_TTL_HOURS = float(os.environ.get("AIVCS_MODEL_TTL_HOURS", "24"))
 
@@ -91,9 +126,10 @@ _RUNTIME_VISION: dict[str, str] = {"base_url": "", "model": "", "api_key": ""}
 LOCAL_CONFIG_TOKEN = secrets.token_urlsafe(32)
 
 # Where the token is exposed for the Electron main process to read (127.0.0.1
-# only). Never logged, never returned in API responses.
+# only). Never logged, never returned in API responses. Writable: DATA_DIR in
+# packaged mode, dev fallback under backend/data.
 RUNTIME_TOKEN_FILE = Path(
-    os.environ.get("AIVCS_RUNTIME_TOKEN_FILE", ROOT / "backend" / "data" / "runtime_config_token")
+    os.environ.get("AIVCS_RUNTIME_TOKEN_FILE", DATA_DIR / "runtime_config_token")
 )
 
 

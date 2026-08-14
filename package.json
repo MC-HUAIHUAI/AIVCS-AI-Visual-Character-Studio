@@ -18,7 +18,11 @@
     "test:frontend": "tsc -p tools/tsconfig.review-test.json && node tools/test_vision_review_logic.mjs && node tools/test_generation_logic.mjs && node tools/test_model_info_logic.mjs && node tools/test_external3d_settings_logic.mjs && node tools/test_app_settings_logic.mjs && node tools/test_vrm_export_logic.mjs && node tools/test_character_asset_logic.mjs && node tools/test_portrait2d_logic.mjs",
     "gen:demo": "python tools/gen_demo_character.py",
     "backend": "python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8321 --reload",
-    "backend:install": "python -m pip install -r backend/requirements.txt"
+    "backend:install": "python -m pip install -r backend/requirements.txt",
+    "backend:exe": "python tools/build_backend_exe.py",
+    "dist:win": "npm run backend:exe && electron-builder --win nsis",
+    "dist:portable": "npm run backend:exe && electron-builder --win portable",
+    "dist:all": "npm run backend:exe && electron-builder --win"
   },
   "dependencies": {
     "@fontsource/inter": "^5.0.0",
@@ -35,6 +39,7 @@
     "@types/three": "^0.170.0",
     "@vitejs/plugin-react": "^4.3.3",
     "electron": "^33.2.0",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^2.3.0",
     "typescript": "^5.6.3",
     "vite": "^5.4.11"
