@@ -132,7 +132,8 @@ class KimiVisionProvider(AIVisionProvider):
         inputs: list[VisionImageInput],
         on_progress: VisionProgressCallback,
     ) -> dict:
-        if not config.KIMI_API_KEY:
+        eff = config.effective_kimi_config()
+        if not eff["api_key"]:
             raise VisionProviderError("Kimi API Key 未配置")
         if len(inputs) > MAX_REFERENCES:
             raise VisionProviderError(f"一次最多支持 {MAX_REFERENCES} 张参考图（front/side/back/custom）")
@@ -146,7 +147,7 @@ class KimiVisionProvider(AIVisionProvider):
         content.append({"type": "text", "text": USER_FINAL_INSTRUCTION})
 
         payload = {
-            "model": config.KIMI_MODEL,
+            "model": eff["model"],
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": content},
@@ -215,11 +216,12 @@ class KimiVisionProvider(AIVisionProvider):
     # ------------------------------------------------------------------ #
 
     def _call_api(self, payload: dict) -> str:
-        url = config.KIMI_BASE_URL.rstrip("/") + "/chat/completions"
+        eff = config.effective_kimi_config()
+        url = eff["base_url"].rstrip("/") + "/chat/completions"
         body = json.dumps(payload).encode("utf-8")
         req = request.Request(url, data=body, method="POST")
         req.add_header("Content-Type", "application/json")
-        req.add_header("Authorization", f"Bearer {config.KIMI_API_KEY}")
+        req.add_header("Authorization", f"Bearer {eff['api_key']}")
         try:
             with request.urlopen(req, timeout=config.KIMI_TIMEOUT_SECONDS) as resp:
                 raw_body = resp.read().decode("utf-8")

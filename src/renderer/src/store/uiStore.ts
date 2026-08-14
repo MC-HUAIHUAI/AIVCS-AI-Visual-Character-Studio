@@ -1,16 +1,16 @@
 import { create } from 'zustand'
 import { backendHealth } from '../core/providers/httpProvider'
 import type { CameraPreset } from '../three/ViewportManager'
-import { DEFAULT_EXTERNAL3D_SETTINGS } from '../core/settings/external3dSettingsLogic'
-import type { External3DProviderSettings } from '@shared/types'
+import { defaultAppSettings } from '../core/settings/appSettingsLogic'
+import type { AppSettings, ProviderEndpointSettings } from '@shared/types'
 
 interface UIState {
   backendOnline: boolean
   providerId: string
   cameraPreset: CameraPreset
   selectedReferenceIds: string[]
-  /** Phase 2.4-D-pre: reserved external 3D provider contract (in-memory only). */
-  external3d: External3DProviderSettings
+  /** Phase 3-5A: app-level provider settings (persisted via main process). */
+  appSettings: AppSettings
   settingsOpen: boolean
   portrait2dOpen: boolean
 
@@ -19,7 +19,11 @@ interface UIState {
   setCameraPreset: (preset: CameraPreset) => void
   toggleReference: (id: string) => void
   clearReferences: () => void
-  setExternal3D: (patch: Partial<External3DProviderSettings>) => void
+  setExternal3D: (patch: Partial<ProviderEndpointSettings>) => void
+  setVisionSettings: (patch: Partial<ProviderEndpointSettings>) => void
+  loadAppSettings: () => Promise<void>
+  saveAppSettings: () => Promise<{ ok: boolean; error?: string }>
+  testProviderConnection: (kind: 'vision' | 'external3d') => Promise<{ ok: boolean; error?: string }>
   openSettings: () => void
   closeSettings: () => void
   openPortrait2D: () => void
@@ -31,7 +35,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   providerId: 'mock-local',
   cameraPreset: 'iso',
   selectedReferenceIds: [],
-  external3d: { ...DEFAULT_EXTERNAL3D_SETTINGS },
+  appSettings: defaultAppSettings(),
   settingsOpen: false,
   portrait2dOpen: false,
 
@@ -58,7 +62,25 @@ export const useUIStore = create<UIState>((set, get) => ({
   clearReferences: () => set({ selectedReferenceIds: [] }),
 
   setExternal3D: (patch) => {
-    set((s) => ({ external3d: { ...s.external3d, ...patch } }))
+    set((s) => ({ appSettings: { ...s.appSettings, external3d: { ...s.appSettings.external3d, ...patch } } }))
+  },
+
+  setVisionSettings: (patch) => {
+    set((s) => ({ appSettings: { ...s.appSettings, vision: { ...s.appSettings.vision, ...patch } } }))
+  },
+
+  loadAppSettings: async () => {
+    const settings = await window.aivcs.loadAppSettings()
+    set({ appSettings: settings })
+  },
+
+  saveAppSettings: async () => {
+    const result = await window.aivcs.saveAppSettings(get().appSettings)
+    return result
+  },
+
+  testProviderConnection: async (kind) => {
+    return window.aivcs.testProviderConnection(kind, get().appSettings)
   },
 
   openSettings: () => set({ settingsOpen: true }),

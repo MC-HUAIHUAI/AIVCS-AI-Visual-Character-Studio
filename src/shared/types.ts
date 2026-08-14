@@ -636,13 +636,27 @@ export interface GenerationJob {
  * ProjectData / CharacterSpec / ModelAsset - real credentials get secure
  * storage only when the provider is actually implemented.
  */
-export interface External3DProviderSettings {
-  /** Default false. Reserved flag for a future external provider. */
+/**
+ * App-level provider endpoint configuration (Phase 3-5A). Belongs ONLY to
+ * App Settings - never to ProjectData / CharacterSpec / CharacterAsset /
+ * ModelAsset / Job. API keys are encrypted at rest via Electron safeStorage.
+ */
+export interface ProviderEndpointSettings {
+  /** Default false. Disabled providers never touch the network. */
   enabled: boolean
-  /** Vendor-agnostic provider id, e.g. "external-3d". */
+  /** Vendor-agnostic provider id, e.g. "kimi" | "external-3d". */
   providerId: string
-  /** Empty by default; never contacted while disabled. String/format check only. */
+  /** Empty by default; http(s) only. Never contacted while disabled. */
   baseUrl: string
+  /** Empty by default. Never logged, never returned, never in ProjectData. */
+  apiKey: string
+}
+
+/** App-level settings. Not part of any project data. */
+export interface AppSettings {
+  version: 1
+  vision: ProviderEndpointSettings
+  external3d: ProviderEndpointSettings
 }
 
 export const IPC_CHANNELS = {
@@ -650,5 +664,8 @@ export const IPC_CHANNELS = {
   loadProject: 'project:load',
   importImages: 'project:import-images',
   exportModel: 'model:export',
-  pickExportPath: 'model:pick-export-path'
+  pickExportPath: 'model:pick-export-path',
+  settingsLoad: 'settings:load',
+  settingsSave: 'settings:save',
+  settingsTestConnection: 'settings:test-connection'
 } as const

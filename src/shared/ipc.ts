@@ -3,7 +3,8 @@ import type {
   ProjectSaveResult,
   ProjectLoadResult,
   ImportImageResult,
-  ExportModelResult
+  ExportModelResult,
+  AppSettings
 } from './types'
 
 /**
@@ -18,4 +19,16 @@ export interface AivcsApi {
   exportModel(dataUrl: string, defaultName: string): Promise<ExportModelResult>
   /** Opens a save dialog and returns the chosen path (null when cancelled). */
   pickExportPath(defaultName: string): Promise<string | null>
+  /** Loads app-level settings (safeStorage-decrypted apiKey only inside main). */
+  loadAppSettings(): Promise<AppSettings>
+  /** Persists app-level settings; apiKey encrypted at rest in main. */
+  saveAppSettings(settings: AppSettings): Promise<{ ok: boolean; error?: string }>
+  /**
+   * User-initiated connectivity test. Only this call may produce a network
+   * request; startup/load/save never do.
+   */
+  testProviderConnection(
+    kind: 'vision' | 'external3d',
+    settings: AppSettings
+  ): Promise<{ ok: boolean; error?: string }>
 }

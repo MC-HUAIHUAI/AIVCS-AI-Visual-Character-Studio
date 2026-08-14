@@ -6,6 +6,7 @@ backend/.env file (git-ignored) can hold these vars via python-dotenv.
 """
 
 import os
+import secrets
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
@@ -64,6 +65,64 @@ KIMI_API_KEY = os.environ.get("AIVCS_KIMI_API_KEY", "")
 KIMI_BASE_URL = os.environ.get("AIVCS_KIMI_BASE_URL", "https://api.moonshot.cn/v1")
 KIMI_MODEL = os.environ.get("AIVCS_KIMI_MODEL", "kimi-k2.6")
 KIMI_TIMEOUT_SECONDS = float(os.environ.get("AIVCS_KIMI_TIMEOUT_SECONDS", "240"))
+
+
+# --------------------------------------------------------------------------- #
+# Phase 3-5A: runtime provider config bridge (AppSettings -> backend).
+# --------------------------------------------------------------------------- #
+#
+# The renderer persists App Settings (Vision / External 3D) via the Electron
+# main process (safeStorage). The effective provider config on the backend is:
+#   - env vars always win (AIVCS_KIMI_*) to preserve existing deployments;
+#   - otherwise a runtime override set by the main process over localhost.
+# Only the main process may set runtime config; it authenticates with a random
+# per-process token written to a local runtime file (never over GET, never
+# logged, never in responses, no external proxy).
+
+# In-memory runtime overrides (empty = not set by the main process).
+_RUNTIME_VISION: dict[str, str] = {"base_url": "", "model": "", "api_key": ""}
+
+# Random per-process token used to guard the local config endpoint.
+LOCAL_CONFIG_TOKEN = secrets.token_urlsafe(32)
+
+# Where the token is exposed for the Electron main process to read (127.0.0.1
+# only). Never logged, never returned in API responses.
+RUNTIME_TOKEN_FILE = Path(
+    os.environ.get("AIVCS_RUNTIME_TOKEN_FILE", ROOT / "backend" / "data" / "runtime_config_token")
+)
+
+
+def write_runtime_token_file() -> None:
+    try:
+        RUNTIME_TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
+        RUNTIME_TOKEN_FILE.write_text(LOCAL_CONFIG_TOKEN, encoding="utf-8")
+    except OSError:
+        # Best effort: if the token file cannot be written, runtime config
+        # override is disabled (env-only mode), which is still safe.
+        pass
+
+
+def set_runtime_vision(base_url: str = "", model: str = "", api_key: str = "") -> None:
+    """Set runtime overrides (called by the main process only)."""
+    _RUNTIME_VISION["base_url"] = base_url or ""
+    _RUNTIME_VISION["model"] = model or ""
+    _RUNTIME_VISION["api_key"] = api_key or ""
+    # Rebuild the vision provider registry so the new effective config applies
+    # without a backend restart.
+    from .providers.vision import registry as _vision_registry
+
+    _vision_registry.rebuild_registry()
+
+
+def effective_kimi_config() -> dict[str, str]:
+    """Return the effective Kimi config: env wins, runtime is the fallback."""
+    if KIMI_API_KEY:
+        return {"api_key": KIMI_API_KEY, "base_url": KIMI_BASE_URL, "model": KIMI_MODEL}
+    return {
+        "api_key": _RUNTIME_VISION.get("api_key", ""),
+        "base_url": _RUNTIME_VISION.get("base_url") or KIMI_BASE_URL,
+        "model": _RUNTIME_VISION.get("model") or KIMI_MODEL,
+    }
 
 BACKEND_NAME = "aivcs-backend"
 BACKEND_VERSION = "0.1.0"

@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { IPC_CHANNELS } from '../shared/types'
 import type { AivcsApi } from '../shared/ipc'
 import type {
+  AppSettings,
   ProjectData,
   ProjectSaveResult,
   ProjectLoadResult,
@@ -17,7 +18,15 @@ const api: AivcsApi = {
   exportModel: (dataUrl: string, defaultName: string): Promise<ExportModelResult> =>
     ipcRenderer.invoke(IPC_CHANNELS.exportModel, dataUrl, defaultName),
   pickExportPath: (defaultName: string): Promise<string | null> =>
-    ipcRenderer.invoke(IPC_CHANNELS.pickExportPath, defaultName)
+    ipcRenderer.invoke(IPC_CHANNELS.pickExportPath, defaultName),
+  loadAppSettings: (): Promise<AppSettings> => ipcRenderer.invoke(IPC_CHANNELS.settingsLoad),
+  saveAppSettings: (settings: AppSettings): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.settingsSave, settings),
+  testProviderConnection: (
+    kind: 'vision' | 'external3d',
+    settings: AppSettings
+  ): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.settingsTestConnection, kind, settings)
 }
 
 contextBridge.exposeInMainWorld('aivcs', api)

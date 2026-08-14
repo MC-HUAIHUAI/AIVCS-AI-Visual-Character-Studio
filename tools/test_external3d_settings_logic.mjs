@@ -20,7 +20,7 @@ function check(name, fn) {
 
 check('default settings are disabled', () => {
   const d = logic.DEFAULT_EXTERNAL3D_SETTINGS
-  assert.deepEqual(d, { enabled: false, providerId: '', baseUrl: '' })
+  assert.deepEqual(d, { enabled: false, providerId: '', baseUrl: '', apiKey: '' })
 })
 
 check('isExternal3DReserved is true in this release', () => {
@@ -28,8 +28,8 @@ check('isExternal3DReserved is true in this release', () => {
 })
 
 check('reserved notice text', () => {
-  assert.equal(logic.external3DReservedNotice(), '预留接口，当前版本未启用')
-  assert.equal(logic.external3DDisabledReason(), '预留接口，当前版本未启用')
+  assert.equal(logic.external3DReservedNotice(), '外部 3D Provider：已预留配置（真实服务尚未实现）')
+  assert.equal(logic.external3DDisabledReason(), '真实外部 3D 服务尚未实现，仅可配置；当前版本继续使用本地 LocalLowPower / Mock。')
 })
 
 check('baseUrl format check accepts http/https', () => {
@@ -49,16 +49,29 @@ check('validation returns no issues while disabled', () => {
   assert.deepEqual(issues, [])
 })
 
-check('validation flags empty providerId / bad baseUrl when enabled', () => {
-  const issues = logic.validateExternal3DSettings({ enabled: true, providerId: '', baseUrl: '' })
-  assert.equal(issues.length, 2)
+check('validation flags empty providerId / bad baseUrl / missing key when enabled', () => {
+  const issues = logic.validateExternal3DSettings({ enabled: true, providerId: '', baseUrl: '', apiKey: '' })
+  assert.equal(issues.length, 3)
   assert.ok(issues.some((i) => i.field === 'providerId'))
   assert.ok(issues.some((i) => i.field === 'baseUrl'))
+  assert.ok(issues.some((i) => i.field === 'apiKey'))
 })
 
-check('validation passes with formatted values', () => {
-  const issues = logic.validateExternal3DSettings({ enabled: true, providerId: 'external-3d', baseUrl: 'https://api.example.com' })
+check('validation passes with formatted values + key', () => {
+  const issues = logic.validateExternal3DSettings({ enabled: true, providerId: 'external-3d', baseUrl: 'https://api.example.com', apiKey: 'sk-test' })
   assert.deepEqual(issues, [])
+})
+
+check('providerStatus derivation', () => {
+  assert.equal(logic.providerStatus({ enabled: false, providerId: '', baseUrl: '', apiKey: '' }), 'unconfigured')
+  assert.equal(logic.providerStatus({ enabled: false, providerId: 'x', baseUrl: 'https://a', apiKey: 'k' }), 'configured-disabled')
+  assert.equal(logic.providerStatus({ enabled: true, providerId: 'x', baseUrl: 'https://a', apiKey: 'k' }), 'enabled')
+})
+
+check('redactApiKey hides real key', () => {
+  assert.equal(logic.redactApiKey('abcdef123456'), 'ab***56')
+  assert.equal(logic.redactApiKey(''), '')
+  assert.equal(logic.redactApiKey('abcdef'), '***')
 })
 
 check('logic is pure - no network surface', () => {
