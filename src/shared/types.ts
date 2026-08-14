@@ -427,6 +427,8 @@ export interface GlbStats {
   center: GlbCenter | null
   meshStats: MeshStat[]
   warnings: string[]
+  /** Phase 2.7-D: whether the GLB carries a `skins` entry (skinned mesh). Optional. */
+  skinned?: boolean
 }
 
 export interface ProjectData {

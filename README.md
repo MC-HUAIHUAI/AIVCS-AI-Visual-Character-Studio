@@ -155,6 +155,22 @@ npm run dev
 - **明确不做（Phase 2.6）**：动画、物理、VRM（Phase 2.7）；真实厂商接入。
 - **明确记录**：Phase 2.6 纯本地实现，**未发生任何真实 API 请求**（零联网、零 Key、零充值）。
 
+## Phase 2.7 — VRM 1.0 导出（当前状态）
+
+- **VRM 1.0 exporter**（`backend/app/services/vrm_exporter.py` + `vrm_mapping.py`）：把 Phase 2.6 的 skinned GLB 导出为合法 VRM 1.0 GLB。基于**官方 VRM 1.0 schema**（`VRMC_vrm`/`meta`/`humanoid`/`humanBones` 必填字段与 15 个 required bones 逐一核对）；注入 `VRMC_vrm`（specVersion/meta/humanoid），保持 nodes/POSITION/skin/JOINTS_0/WEIGHTS_0/IBM 不变，仅追加合成骨骼的 bind-pose world 逆 IBM。确定性输出。
+- **Required bones 合成**：把单段肢体骨拆分为 VRM 需要的 `leftLowerArm/rightLowerArm/leftLowerLeg/rightLowerLeg`；biped-anthro 缺独立手/脚时，以对应肢体骨骼自身世界位置为端点合成 `leftHand/rightHand/leftFoot/rightFoot`（确定性、无调参）。
+- **白名单**：`humanoid / biped-anthro / custom` 可导出；`quadruped / bird / dragon` 明确 400（不强行映射非人类）。
+- **`meta.licenseUrl`**：按官方规范使用 VRM Public License 唯一 URL `https://vrm.dev/licenses/1.0/`。
+- **验证**：
+  - `backend/app/services/vrm_validator.py`：零依赖结构校验（GLB 合法 / extensionsUsed / specVersion / meta required / 15 required bones node 合法 / node/joint/IBM/JOINTS_0 一致性）。
+  - `tools/check_vrm.cjs`：**@pixiv/three-vrm 真实 loader 硬门槛**（devDependency 3.5.5，peer `three >= 0.137` 兼容 three@0.170）——VRM 加载 / humanoid 存在 / 15 required bones 全部可解析 / SkinnedMesh+skeleton / bounds 非空 / 可重复加载。
+  - `tools/check_skinned_glb.cjs`：three.js SkinnedMesh 门槛对 .vrm 同样通过。
+- **非人类 appendages**：biped-anthro 的 tail/ears/wings/horns 仍作为普通 glTF nodes/joints 存在，**不伪装成 VRM Humanoid bones**。
+- **前端「导出 VRM」**（Phase 2.7-D）：TitleBar 按钮调用本地后端 `GET /api/v1/models/{id}/vrm`（`body_type`=spec.bodyType 原样透传、`name`=spec.name），复用现有保存对话框按 `.vrm` 落盘；`GlbStats.skinned`（可选字段）驱动按钮可用性，`skinned=false` 时禁用、缺失时交后端 400 明确提示；demo/本地 mock（无后端 ModelRecord）不可导出。不伪造可用状态。
+- **兼容**：默认 `AIVCS_LOCAL3D_RIG_ENABLED=false` 时旧 GLB 行为与字节稳定不受影响；GlbStats.skinned 为可选字段，旧 stats/旧项目兼容；无 bones 输入安全失败。
+- **明确不做（Phase 2.7）**：SpringBone / Animation / MToon / VRM 0.x / 非人类（quadruped/bird/dragon）VRM 语义 / hips 重根（规范未强制）/ 真实厂商。
+- **明确记录**：Phase 2.7 纯本地实现，**未发生任何真实 API 请求**（零联网、零 Key、零充值；仅按官方 schema 文档核对字段）。
+
 ## Mock 功能（模拟，非真实实现）
 
 - **Mock AI Provider**（前端本地 + 后端各一份）：按角色类型返回对应演示 GLB（人类→人形、非人类→兽人狐），模拟各阶段耗时与进度；无需网络、无需任何 AI API
@@ -167,7 +183,7 @@ npm run dev
 - 真实云端 Image-to-3D（`RealImage3DProviderPlaceholder` 已占位；`LocalLowPower3DProvider` 为本地 CPU 原型，非云端质量）
 - 真实骨骼生成与蒙皮绑定（RigProfile 数据已就绪）
 - 真实毛发（贴图/法线/材质、Hair cards、Groom curves）
-- VRM 导出（非人类结构作为 Extra Bones 的规则已定义）
+- VRM 高级能力：SpringBone / Animation / MToon / VRM 0.x；非人类（quadruped/bird/dragon）VRM 语义
 - Live2D 导出 / 完整 Live2D 支持
 - 动画、物理、VTuber 面部/动作追踪
 

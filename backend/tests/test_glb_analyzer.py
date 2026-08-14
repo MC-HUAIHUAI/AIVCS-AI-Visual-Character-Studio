@@ -137,6 +137,32 @@ class GlbAnalyzerTest(unittest.TestCase):
         self.assertEqual(stats.triangleCount, 1)
         self.assertTrue(any("非索引" in w for w in stats.warnings))
 
+    def test_skinned_flag(self):
+        unskinned = {
+            "asset": {"version": "2.0"},
+            "buffers": [{"byteLength": 0}],
+            "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteLength": 0, "target": 34962}],
+            "accessors": [{"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0, 0, 0], "max": [1, 1, 1]}],
+            "meshes": [{"name": "m", "primitives": [{"attributes": {"POSITION": 0}, "mode": 4}]}],
+            "nodes": [{"mesh": 0}],
+            "scenes": [{"nodes": [0]}],
+            "scene": 0,
+        }
+        self.assertFalse(analyze_glb(make_glb(unskinned)).skinned)
+
+        skinned = {
+            "asset": {"version": "2.0"},
+            "buffers": [{"byteLength": 0}],
+            "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteLength": 0, "target": 34962}],
+            "accessors": [{"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0, 0, 0], "max": [1, 1, 1]}],
+            "meshes": [{"name": "m", "primitives": [{"attributes": {"POSITION": 0}, "mode": 4}]}],
+            "nodes": [{"mesh": 0, "skin": 0}],
+            "skins": [{"joints": [0], "inverseBindMatrices": 0}],
+            "scenes": [{"nodes": [0]}],
+            "scene": 0,
+        }
+        self.assertTrue(analyze_glb(make_glb(skinned)).skinned)
+
     def test_empty_invalid_raises_valueerror(self):
         with self.assertRaises(ValueError):
             analyze_glb(b"")

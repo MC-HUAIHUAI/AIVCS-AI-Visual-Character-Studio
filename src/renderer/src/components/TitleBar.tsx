@@ -2,7 +2,13 @@ import { useState } from 'react'
 import { useProjectStore } from '../store/projectStore'
 import { useUIStore } from '../store/uiStore'
 import { getViewportManager } from '../three/controller'
-import { modelExporters } from '../core/providers/modelExporter'
+import { modelExporters, toDataUrl } from '../core/providers/modelExporter'
+import { fetchVrmBytes } from '../core/providers/httpProvider'
+import {
+  canExportVrm,
+  vrmErrorText,
+  vrmExportDefaultName
+} from '../core/spec/vrmExportLogic'
 
 export default function TitleBar(): JSX.Element {
   const isDirty = useProjectStore((s) => s.isDirty)
@@ -11,9 +17,15 @@ export default function TitleBar(): JSX.Element {
   const newProject = useProjectStore((s) => s.newProject)
   const projectName = useProjectStore((s) => s.project.name)
   const specName = useProjectStore((s) => s.project.spec.name)
+  const specBodyType = useProjectStore((s) => s.project.spec.bodyType)
+  const models = useProjectStore((s) => s.project.models)
+  const selectedModelId = useProjectStore((s) => s.selectedModelId)
   const backendOnline = useUIStore((s) => s.backendOnline)
   const openSettings = useUIStore((s) => s.openSettings)
   const [busy, setBusy] = useState(false)
+
+  const selectedModel = models.find((m) => m.id === selectedModelId) ?? null
+  const vrmAvailable = canExportVrm(selectedModel, backendOnline)
 
   const handleNew = (): void => {
     if (isDirty && !window.confirm('当前项目有未保存的更改，仍要新建项目吗？')) return
@@ -49,6 +61,24 @@ export default function TitleBar(): JSX.Element {
     }
   }
 
+  const handleExportVrm = async (): Promise<void> => {
+    if (!selectedModel) return
+    setBusy(true)
+    try {
+      // body_type is passed through VERBATIM from spec.bodyType - never guessed
+      // or converted; the backend whitelist is the source of truth.
+      const { bytes, mime } = await fetchVrmBytes(selectedModel.id, specBodyType, specName)
+      const dataUrl = toDataUrl(bytes, mime)
+      const result = await window.aivcs.exportModel(dataUrl, vrmExportDefaultName(specName))
+      if (result.ok) window.alert(`已导出到：\n${result.path}`)
+    } catch (err) {
+      const e = err as { status?: number | null; detail?: string | null; isNetwork?: boolean }
+      window.alert(vrmErrorText(e.status ?? null, e.detail ?? null, e.isNetwork === true))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <header className="titlebar">
       <div className="titlebar__brand">
@@ -72,6 +102,20 @@ export default function TitleBar(): JSX.Element {
         </button>
         <button className="btn btn--ghost btn--sm" onClick={() => void handleExport()} disabled={busy}>
           {busy ? '导出中…' : '导出 GLB'}
+        </button>
+        <button
+          className="btn btn--ghost btn--sm"
+          onClick={() => void handleExportVrm()}
+          disabled={busy || !vrmAvailable}
+          title={
+            vrmAvailable
+              ? '导出 VRM（本地后端 /api/v1/models/{id}/vrm）'
+              : backendOnline
+                ? '当前选中的模型不是后端生成的模型，无法导出 VRM'
+                : '后端离线，无法导出 VRM'
+          }
+        >
+          {busy ? '导出中…' : '导出 VRM'}
         </button>
         <button className="btn btn--ghost btn--sm" onClick={openSettings}>
           设置

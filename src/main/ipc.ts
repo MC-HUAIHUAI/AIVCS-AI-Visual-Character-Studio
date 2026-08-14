@@ -22,6 +22,33 @@ const MIME_BY_EXT: Record<string, string> = {
   '.webp': 'image/webp'
 }
 
+interface ExportFormat {
+  name: string
+  extensions: string[]
+}
+
+const EXPORT_FORMATS: Record<string, ExportFormat> = {
+  '.glb': { name: 'glTF Binary', extensions: ['glb'] },
+  '.gltf': { name: 'glTF', extensions: ['gltf'] },
+  '.vrm': { name: 'VRM', extensions: ['vrm'] }
+}
+
+/** Picks the export format descriptor from the requested default file name. */
+function exportFormatFor(defaultName: string): ExportFormat {
+  const lower = defaultName.toLowerCase()
+  for (const ext of ['.vrm', '.glb', '.gltf']) {
+    if (lower.endsWith(ext)) return EXPORT_FORMATS[ext]
+  }
+  return EXPORT_FORMATS['.glb']
+}
+
+/** Ensures defaultName carries the extension that matches its format. */
+function defaultPathFor(defaultName: string): string {
+  const format = exportFormatFor(defaultName)
+  const ext = format.extensions[0]
+  return defaultName.toLowerCase().endsWith(`.${ext}`) ? defaultName : `${defaultName || 'character'}.${ext}`
+}
+
 function newId(): string {
   return `id_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
 }
@@ -98,13 +125,11 @@ function registerProjectHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.exportModel,
     async (_event, dataUrl: string, defaultName: string): Promise<ExportModelResult> => {
+      const format = exportFormatFor(defaultName)
       const result = await dialog.showSaveDialog({
         title: 'Export Model',
-        defaultPath: defaultName.endsWith('.glb') ? defaultName : `${defaultName || 'character'}.glb`,
-        filters: [
-          { name: 'glTF Binary', extensions: ['glb'] },
-          { name: 'glTF', extensions: ['gltf'] }
-        ]
+        defaultPath: defaultPathFor(defaultName),
+        filters: [format]
       })
       if (result.canceled || !result.filePath) return { ok: false, error: 'cancelled' }
       try {
@@ -119,10 +144,11 @@ function registerProjectHandlers(): void {
   )
 
   ipcMain.handle(IPC_CHANNELS.pickExportPath, async (_event, defaultName: string): Promise<string | null> => {
+    const format = exportFormatFor(defaultName)
     const result = await dialog.showSaveDialog({
       title: 'Choose Export Location',
-      defaultPath: defaultName.endsWith('.glb') ? defaultName : `${defaultName || 'character'}.glb`,
-      filters: [{ name: 'glTF Binary', extensions: ['glb'] }]
+      defaultPath: defaultPathFor(defaultName),
+      filters: [format]
     })
     return result.canceled || !result.filePath ? null : result.filePath
   })

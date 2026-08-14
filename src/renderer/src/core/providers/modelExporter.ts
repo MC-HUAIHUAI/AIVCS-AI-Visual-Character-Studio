@@ -28,7 +28,7 @@ export interface IModelExporter {
   exportModel(root: THREE.Object3D, options: ExportModelOptions): Promise<ExportModelOutput>
 }
 
-function toDataUrl(buffer: ArrayBuffer, mime: string): string {
+export function toDataUrl(buffer: ArrayBuffer, mime: string): string {
   const bytes = new Uint8Array(buffer)
   let binary = ''
   const chunk = 0x8000

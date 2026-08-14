@@ -64,6 +64,9 @@ class GlbStats:
     center: dict | None = None
     meshStats: list[MeshStat] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    # Phase 2.7-D: whether the GLB carries a `skins` entry (skinned mesh).
+    # Optional field; old stats without it stay valid/backward compatible.
+    skinned: bool = False
 
 
 def _accessor_at(prim: dict, accessors: list, key: str):
@@ -151,6 +154,7 @@ def analyze_glb(data: bytes) -> GlbStats:
     textures = gltf.get("textures") or []
     stats.materialCount = len(materials)
     stats.textureCount = _count_referenced_textures(materials) or len(textures)
+    stats.skinned = bool(gltf.get("skins"))
 
     meshes = gltf.get("meshes") or []
     stats.meshCount = len(meshes)

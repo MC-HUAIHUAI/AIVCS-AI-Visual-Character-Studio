@@ -21,6 +21,7 @@
     "../src/renderer/src/core/spec/applyVisionResult.ts",
     "../src/renderer/src/core/spec/generationLogic.ts",
     "../src/renderer/src/core/spec/modelInfoLogic.ts",
+    "../src/renderer/src/core/spec/vrmExportLogic.ts",
     "../src/renderer/src/core/settings/external3dSettingsLogic.ts"
   ]
 }

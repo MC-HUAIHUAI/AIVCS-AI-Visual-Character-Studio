@@ -71,6 +71,48 @@ export async function downloadModel(
   return { bytes, mime: res.headers.get('Content-Type') ?? undefined, sizeBytes: bytes.byteLength }
 }
 
+export interface VrmFetchError extends Error {
+  status: number | null
+  detail: string | null
+  isNetwork: boolean
+}
+
+export async function fetchVrmBytes(
+  modelId: string,
+  bodyType: string,
+  name: string
+): Promise<{ bytes: ArrayBuffer; mime: string }> {
+  let res: Response
+  try {
+    res = await fetch(
+      `${AIVCS_BACKEND_URL}/api/v1/models/${encodeURIComponent(modelId)}/vrm?body_type=${encodeURIComponent(bodyType)}&name=${encodeURIComponent(name)}`,
+      { signal: AbortSignal.timeout(30000) }
+    )
+  } catch {
+    const err = new Error('后端离线，无法导出 VRM') as VrmFetchError
+    err.status = null
+    err.detail = null
+    err.isNetwork = true
+    throw err
+  }
+  if (!res.ok) {
+    let detail: string | null = null
+    try {
+      const body = (await res.json()) as { detail?: string }
+      detail = body.detail ?? null
+    } catch {
+      detail = null
+    }
+    const err = new Error(`VRM 导出失败（HTTP ${res.status}）`) as VrmFetchError
+    err.status = res.status
+    err.detail = detail
+    err.isNetwork = false
+    throw err
+  }
+  const bytes = await res.arrayBuffer()
+  return { bytes, mime: res.headers.get('Content-Type') ?? 'model/gltf-binary' }
+}
+
 /** Shared backend job flow used by backend providers (create -> poll -> download). */
 async function runBackendGenerate(
   backendProviderId: string,

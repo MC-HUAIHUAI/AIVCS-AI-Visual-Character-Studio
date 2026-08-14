@@ -58,3 +58,6 @@ class GlbStats(_CamelModel):
     center: GlbCenter | None = None
     mesh_stats: list[MeshStat] = Field(default_factory=list, alias="meshStats")
     warnings: list[str] = Field(default_factory=list)
+    # Phase 2.7-D: whether the GLB carries a `skins` entry (skinned mesh).
+    # Optional field; old stats without it remain valid.
+    skinned: bool = False
