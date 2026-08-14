@@ -157,8 +157,7 @@ def _validate_glb_inner(data: bytes) -> None:
             raise ValueError("accessor out of buffer bounds")
 
 
-def build_glb(primitives: list[Primitive], scale: float = 1.0) -> bytes:
-    """Serialize primitives (scaled by `scale`) into a binary glTF 2.0 .glb."""
+def _build_meshes(primitives: list[Primitive], scale: float) -> list[_Mesh]:
     meshes: list[_Mesh] = []
     for idx, p in enumerate(primitives):
         color = _hex_to_rgba(p.color)
@@ -170,6 +169,60 @@ def build_glb(primitives: list[Primitive], scale: float = 1.0) -> bytes:
         m.scale = (scale, scale, scale)
         m.rotation = p.rotation
         meshes.append(m)
+    return meshes
+
+
+def _bind_vertices(mesh: _Mesh, bones: list, positions: list[tuple[float, float, float]]):
+    """Assign the 4 nearest bones to each vertex in MODEL space.
+
+    Vertex world position = node translation + node scale * local POSITION.
+    Bone positions are already model space. JOINTS/WEIGHTS never change POSITION.
+    Deterministic: distance ties are broken by bone index."""
+    joints: list[list[int]] = []
+    weights: list[list[float]] = []
+    tx, ty, tz = mesh.translation
+    sx, sy, sz = mesh.scale
+    nv = len(mesh.positions) // 3
+    for i in range(nv):
+        wx = tx + sx * mesh.positions[i * 3]
+        wy = ty + sy * mesh.positions[i * 3 + 1]
+        wz = tz + sz * mesh.positions[i * 3 + 2]
+        dists = []
+        for bi, (bx, by, bz) in enumerate(positions):
+            dx = wx - bx
+            dy = wy - by
+            dz = wz - bz
+            dists.append((dx * dx + dy * dy + dz * dz, bi))
+        dists.sort(key=lambda t: (t[0], t[1]))
+        top = dists[:4]
+        if top[0][0] == 0.0:
+            j = [top[0][1], 0, 0, 0]
+            w = [1.0, 0.0, 0.0, 0.0]
+        else:
+            inv = [1.0 / (d + 1e-6) for d, _ in top]
+            s = sum(inv)
+            w = [v / s for v in inv]
+            j = [bi for _, bi in top]
+            while len(j) < 4:
+                j.append(0)
+            while len(w) < 4:
+                w.append(0.0)
+        joints.append(j[:4])
+        weights.append(w[:4])
+    return joints, weights
+
+
+def build_glb(primitives: list[Primitive], scale: float = 1.0, bones: list | None = None) -> bytes:
+    """Serialize primitives (scaled by `scale`) into a binary glTF 2.0 .glb.
+
+    When `bones` is provided (list of objects with id/parent_id/position in
+    MODEL space), the output gains a parent-child bone hierarchy, a `skins`
+    entry, JOINTS_0/WEIGHTS_0 per-vertex attributes and bind-pose WORLD-inverse
+    inverseBindMatrices. POSITION/NORMAL are never modified. Without `bones`
+    the output is byte-identical to the previous behavior.
+    """
+    meshes = _build_meshes(primitives, scale)
+    skinned = bones is not None
 
     buffer = bytearray()
     buffer_views = []
@@ -179,13 +232,35 @@ def build_glb(primitives: list[Primitive], scale: float = 1.0) -> bytes:
     material_map: dict = {}
     materials: list[dict] = []
     mesh_index = 0
+    mesh_node_indices = []
+    skin_joints: list[int] = []
+    inverse_bind_matrices: list[float] = []
+    bone_nodes: list = []
+    bone_local: dict = {}
 
     def add_view(byte_length: int, target: int):
         offset = len(buffer)
         buffer_views.append({"buffer": 0, "byteOffset": offset, "byteLength": byte_length, "target": target})
         return offset, byte_length
 
+    if skinned:
+        bone_nodes = list(bones)
+        by_id = {getattr(b, "id"): b for b in bone_nodes}
+        for b in bone_nodes:
+            pos = tuple(float(v) for v in b.position)
+            if b.parent_id and b.parent_id in by_id:
+                pp = tuple(float(v) for v in by_id[b.parent_id].position)
+                bone_local[b.id] = (pos[0] - pp[0], pos[1] - pp[1], pos[2] - pp[2])
+            else:
+                bone_local[b.id] = pos
+            inverse_bind_matrices.extend([1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, -pos[0], -pos[1], -pos[2], 1.0])
+        bone_positions = [tuple(float(v) for v in b.position) for b in bone_nodes]
+
     for mesh in meshes:
+        pos_i = len(accessors)
+        nrm_i = pos_i + 1
+        idx_i = pos_i + 2
+
         pos_bytes = struct.pack("<%df" % len(mesh.positions), *mesh.positions)
         _pad4(buffer)
         add_view(len(pos_bytes), 34962)
@@ -219,6 +294,29 @@ def build_glb(primitives: list[Primitive], scale: float = 1.0) -> bytes:
             {"bufferView": len(buffer_views) - 1, "componentType": 5125, "count": len(mesh.indices), "type": "SCALAR"}
         )
 
+        joins_i = weights_i = None
+        if skinned:
+            joins, weights = _bind_vertices(mesh, bone_nodes, bone_positions)
+            flat_j = [v for vert in joins for v in vert]
+            j_bytes = struct.pack("<%dB" % len(flat_j), *flat_j)
+            _pad4(buffer)
+            add_view(len(j_bytes), 34962)
+            buffer += j_bytes
+            accessors.append(
+                {"bufferView": len(buffer_views) - 1, "componentType": 5121, "count": len(joins), "type": "VEC4"}
+            )
+            joins_i = len(accessors) - 1
+
+            flat_w = [v for vert in weights for v in vert]
+            w_bytes = struct.pack("<%df" % len(flat_w), *flat_w)
+            _pad4(buffer)
+            add_view(len(w_bytes), 34962)
+            buffer += w_bytes
+            accessors.append(
+                {"bufferView": len(buffer_views) - 1, "componentType": 5126, "count": len(weights), "type": "VEC4"}
+            )
+            weights_i = len(accessors) - 1
+
         if mesh.color not in material_map:
             material_map[mesh.color] = len(materials)
             r, g, b, a = mesh.color
@@ -235,13 +333,17 @@ def build_glb(primitives: list[Primitive], scale: float = 1.0) -> bytes:
             )
         mat_idx = material_map[mesh.color]
 
+        attributes = {"POSITION": pos_i, "NORMAL": nrm_i}
+        if skinned:
+            attributes["JOINTS_0"] = joins_i
+            attributes["WEIGHTS_0"] = weights_i
         mesh_defs.append(
             {
                 "name": mesh.name,
                 "primitives": [
                     {
-                        "attributes": {"POSITION": len(accessors) - 3, "NORMAL": len(accessors) - 2},
-                        "indices": len(accessors) - 1,
+                        "attributes": attributes,
+                        "indices": idx_i,
                         "material": mat_idx,
                         "mode": 4,
                     }
@@ -257,12 +359,46 @@ def build_glb(primitives: list[Primitive], scale: float = 1.0) -> bytes:
         if mesh.rotation != (0.0, 0.0, 0.0):
             node["rotation"] = list(_euler_to_quaternion(*mesh.rotation))
         nodes.append(node)
+        mesh_node_indices.append(len(nodes) - 1)
         mesh_index += 1
+
+    skins: list[dict] = []
+    if skinned:
+        bone_node_index: dict = {}
+        for b in bone_nodes:
+            bone_node_index[b.id] = len(nodes)
+            nodes.append({"name": b.id, "translation": list(bone_local[b.id])})
+        for b in bone_nodes:
+            if b.parent_id and b.parent_id in bone_node_index:
+                nodes[bone_node_index[b.id]]["parent"] = bone_node_index[b.parent_id]
+
+        ibm_bytes = struct.pack("<%df" % len(inverse_bind_matrices), *inverse_bind_matrices)
+        _pad4(buffer)
+        add_view(len(ibm_bytes), 34962)
+        buffer += ibm_bytes
+        accessors.append(
+            {"bufferView": len(buffer_views) - 1, "componentType": 5126, "count": len(bone_nodes), "type": "MAT4"}
+        )
+        ibm_i = len(accessors) - 1
+
+        root = next((i for i, b in enumerate(bone_nodes) if not b.parent_id), 0)
+        skins.append(
+            {
+                "joints": [bone_node_index[b.id] for b in bone_nodes],
+                "inverseBindMatrices": ibm_i,
+                "skeleton": bone_node_index[bone_nodes[root].id],
+            }
+        )
+        for idx in mesh_node_indices:
+            nodes[idx]["skin"] = 0
+        scene_nodes = mesh_node_indices + [bone_node_index[b.id] for b in bone_nodes if not b.parent_id]
+    else:
+        scene_nodes = list(range(len(nodes)))
 
     gltf = {
         "asset": {"version": "2.0", "generator": "AIVCS local low-power 3D provider"},
         "scene": 0,
-        "scenes": [{"nodes": list(range(len(nodes)))}],
+        "scenes": [{"nodes": scene_nodes}],
         "nodes": nodes,
         "meshes": mesh_defs,
         "materials": materials,
@@ -270,6 +406,8 @@ def build_glb(primitives: list[Primitive], scale: float = 1.0) -> bytes:
         "bufferViews": buffer_views,
         "buffers": [{"byteLength": len(buffer)}],
     }
+    if skinned:
+        gltf["skins"] = skins
 
     json_bytes = json.dumps(gltf, separators=(",", ":")).encode("utf-8")
     _pad4(json_bytes)
