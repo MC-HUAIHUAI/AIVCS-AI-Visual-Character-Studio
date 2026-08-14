@@ -133,6 +133,18 @@ npm run dev
   - 状态映射 / 错误映射 / `OfflineFakeVendorClient` 全流程不变。
 - **后续**：需官方文档可访问后，再按真实契约确认 endpoint/DTO/状态并启用真实适配；真实调用仍需人工授权。
 
+## Phase 2.5 — GLB 资产分析 / 元数据 / 视口信息（当前状态）
+
+- **GLB Asset Analyzer**（`backend/app/services/glb_analyzer.py`）：纯 stdlib、确定性；输出 `GlbStats`（mesh/primitive/vertex/index/triangle/material/texture、hasNormals/hasUVs、bounds/dimensions/center、meshStats、warnings）；以 `validate_glb` 为结构门禁（语义未改）；单个 mesh/字段异常容错（跳过 + warning，不崩溃）。
+- **资产链路**：`GLB bytes → validate_glb → glb_analyzer → ModelStore(stats) → JobResult.stats → /models/{id}/meta → ModelAsset.glbStats → AssetsPanel / Viewport HUD`。stats 全部 optional，兼容任意 Provider、旧 sidecar / 旧 JobResult / 旧项目。
+- **ModelStore**：`ModelRecord.stats?` + `normalizations?`（sidecar 兼容、TTL 不受影响）；生成成功自动分析，Analyzer 异常安全降级（job 保持 done，仅日志）。
+- **Viewport HUD**：加载成功后显示「视口尺寸」（world Box3，`getModelInfo` 纯读取）；（有 stats 时）网格数；切换/失败即清空。
+- **AssetsPanel 诊断**：选中模型显示 文件大小 / GLB 版本 / 网格 / Primitive / 顶点 / 三角形 / 材质 / 贴图 / 法线 / UV / 「GLB 分析尺寸（局部坐标）」/ Bounds / warnings；缺失字段显示「—」，不猜测。
+- **当前 bounds 语义（明确区分）**：`glb_analyzer.bounds` = **POSITION accessor 局部坐标**（未应用节点变换）；`ViewportManager Box3` = **加载后的 world/scene 空间**。两者不得当作同一尺寸（UI 已分别标注「GLB 分析尺寸（局部坐标）」与「视口尺寸」）。
+- **normalizations**：当前无实际生产者，保持为空、不伪造；仅当未来非空时才显示。
+- **明确不做（Phase 2.5）**：GLB 重写、坐标/单位转换、Y-up 自动翻转、Rig / Skinning / VRM。
+- **明确记录**：Phase 2.5 **不需要真实 3D API，也未发生任何真实 API 请求**（零联网、零 Key、零充值）。
+
 ## Mock 功能（模拟，非真实实现）
 
 - **Mock AI Provider**（前端本地 + 后端各一份）：按角色类型返回对应演示 GLB（人类→人形、非人类→兽人狐），模拟各阶段耗时与进度；无需网络、无需任何 AI API
