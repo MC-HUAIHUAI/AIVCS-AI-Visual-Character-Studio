@@ -27,16 +27,22 @@ function createWindow(): void {
 
   // Forward renderer console messages to the terminal in development so errors
   // surface during debugging (legacy positional form for Electron 33).
-  win.webContents.on('console-message', (_event, level, message, line, sourceId) => {
-    const tag = ['', 'log', 'warning', 'error'][level] ?? String(level)
-    console.log(`[renderer:${tag}] ${message} (${sourceId}:${line})`)
-  })
+  // Release builds never forward renderer output (may contain sensitive data).
+  if (!app.isPackaged) {
+    win.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+      const tag = ['', 'log', 'warning', 'error'][level] ?? String(level)
+      console.log(`[renderer:${tag}] ${message} (${sourceId}:${line})`)
+    })
+  }
 
   // electron-vite injects ELECTRON_RENDERER_URL in dev mode.
   const devUrl = process.env['ELECTRON_RENDERER_URL']
   if (devUrl) {
     win.loadURL(devUrl)
-    win.webContents.openDevTools({ mode: 'detach' })
+    // DevTools only in development - never in a release build.
+    if (!app.isPackaged) {
+      win.webContents.openDevTools({ mode: 'detach' })
+    }
   } else {
     win.loadFile(join(__dirname, '../renderer/index.html'))
   }

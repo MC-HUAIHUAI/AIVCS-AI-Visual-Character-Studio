@@ -162,6 +162,25 @@ class RuntimeVisionConfigTest(unittest.TestCase):
         self.assertTrue(registry.is_provider_available("mock"))
         self.assertTrue(registry.is_provider_available("mock-remote"))
 
+    def test_runtime_token_file_honors_env(self):
+        # Packaged scenario: launcher sets AIVCS_RUNTIME_TOKEN_FILE to a
+        # writable userData path; backend must write the token there.
+        import tempfile
+
+        from backend.app import config as cfg
+
+        with tempfile.TemporaryDirectory() as tmp:
+            target = os.path.join(tmp, "runtime_config_token")
+            old = cfg.RUNTIME_TOKEN_FILE
+            try:
+                cfg.RUNTIME_TOKEN_FILE = __import__("pathlib").Path(target)
+                cfg.write_runtime_token_file()
+                self.assertTrue(os.path.exists(target))
+                content = open(target, encoding="utf-8").read().strip()
+                self.assertEqual(content, cfg.LOCAL_CONFIG_TOKEN)
+            finally:
+                cfg.RUNTIME_TOKEN_FILE = old
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -52,6 +52,28 @@ npm run dev
 | `npm run backend:install` | 安装后端依赖 |
 | `npm run gen:demo` | 重新生成演示角色 GLB |
 
+## API 配置（可选）
+
+AIVCS 默认无需任何 API Key 即可运行：无 API 时使用本地 Mock / LocalLowPower / 2D 功能，**启动零外部网络请求**。
+
+第三方 API（Vision / External 3D）由**最终用户**在软件 **设置（Settings）** 中自行配置：
+
+- 打开 **设置** → **Vision Provider** / **External 3D Provider**
+- 填写 Provider / Base URL / API Key，勾选启用
+- 点击 **测试连接**（仅在你主动点击时才产生网络请求）
+- API Key 仅加密保存在本机（Electron safeStorage），**绝不进入项目文件 / 导出数据 / 日志**
+
+**优先级规则**：
+
+```
+用户 Settings 中配置并启用 → 使用用户配置（source = runtime）
+用户未配置 → 使用本地 Mock / 本地能力
+```
+
+- 发行版**不依赖**开发者的 `.env` 文件。
+- `.env` / 环境变量（如 `AIVCS_KIMI_API_KEY`）**仅作为开发者本地 fallback**，且仅在用户未在 Settings 中配置时生效——用户填写自己的 Key 后绝不会使用开发者的 Key。
+- 无任何 API Key 时：正常启动、创建项目、使用本地/Mock 3D、使用 2D 立绘。
+
 ## 已实现功能（Phase 1）
 
 - **桌面应用**：Electron + React + TypeScript（strict）深色专业 UI，界面全中文

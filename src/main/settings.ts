@@ -18,12 +18,38 @@ import type { AppSettings, ProviderEndpointSettings } from '../shared/types'
 const SETTINGS_FILE = () => join(app.getPath('userData'), 'app-settings.json')
 
 const LOCAL_BACKEND = 'http://127.0.0.1:8321'
-const RUNTIME_TOKEN_FILE = () => join(app.getAppPath(), 'backend', 'data', 'runtime_config_token')
+
+/**
+ * Runtime-config auth token path (pure, testable).
+ * - AIVCS_RUNTIME_TOKEN_FILE env wins (packaged launcher may set it).
+ * - Packaged: userData/runtime_config_token.
+ * - Dev: <appPath>/backend/data/runtime_config_token (backend default).
+ */
+export function resolveRuntimeTokenFile(
+  opts: { env: string; isPackaged: boolean; userData: string; appPath: string }
+): string {
+  if (opts.env) return opts.env
+  if (opts.isPackaged) return join(opts.userData, 'runtime_config_token')
+  return join(opts.appPath, 'backend', 'data', 'runtime_config_token')
+}
+
+const RUNTIME_TOKEN_FILE = () => resolveRuntimeTokenFile({
+  env: process.env['AIVCS_RUNTIME_TOKEN_FILE'] ?? '',
+  isPackaged: app.isPackaged,
+  userData: app.getPath('userData'),
+  appPath: app.getAppPath()
+})
 
 function readRuntimeToken(): string {
   try {
-    if (existsSync(RUNTIME_TOKEN_FILE())) {
-      return readFileSync(RUNTIME_TOKEN_FILE(), 'utf-8').trim()
+    const path = RUNTIME_TOKEN_FILE()
+    if (existsSync(path)) {
+      return readFileSync(path, 'utf-8').trim()
+    }
+    // Packaged fallback: also check the dev-style location if it exists.
+    if (app.isPackaged) {
+      const dev = join(app.getAppPath(), 'backend', 'data', 'runtime_config_token')
+      if (existsSync(dev)) return readFileSync(dev, 'utf-8').trim()
     }
   } catch {
     return ''

@@ -1,3 +1,6 @@
 fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
 pydantic>=2.9.0
+# python-dotenv loads backend/.env for DEVELOPER-LOCAL fallback only.
+# The release build never reads .env; end-user API keys come from App Settings.
+python-dotenv>=1.0
