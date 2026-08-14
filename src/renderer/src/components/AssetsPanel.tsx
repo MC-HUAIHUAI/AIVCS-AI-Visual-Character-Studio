@@ -1,5 +1,7 @@
+import { useMemo } from 'react'
 import { useProjectStore } from '../store/projectStore'
 import { useUIStore } from '../store/uiStore'
+import { buildModelInfoRows } from '../core/spec/modelInfoLogic'
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -28,6 +30,9 @@ export default function AssetsPanel(): JSX.Element {
   const removeImage = useProjectStore((s) => s.removeImage)
   const removeModel = useProjectStore((s) => s.removeModel)
   const clearReferences = useUIStore((s) => s.clearReferences)
+
+  const selectedModel = project.models.find((m) => m.id === selectedModelId) ?? null
+  const modelInfo = useMemo(() => (selectedModel ? buildModelInfoRows(selectedModel) : null), [selectedModel])
 
   return (
     <aside className="panel panel--left">
@@ -107,6 +112,50 @@ export default function AssetsPanel(): JSX.Element {
             </div>
           )}
         </div>
+
+        {modelInfo && (
+          <div className="asset-group">
+            <div className="asset-group__label">模型信息</div>
+            <div
+              style={{
+                fontSize: 11.5,
+                background: 'var(--bg-elevated)',
+                border: '1px solid var(--border)',
+                borderRadius: 8,
+                padding: '8px 10px'
+              }}
+            >
+              {modelInfo.rows.map((r) => (
+                <div
+                  key={r.label}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: 8,
+                    padding: '2px 0'
+                  }}
+                >
+                  <span style={{ color: 'var(--text-dim)' }}>{r.label}</span>
+                  <span style={{ textAlign: 'right' }}>{r.value ?? '—'}</span>
+                </div>
+              ))}
+              {modelInfo.warnings.length > 0 && (
+                <div style={{ fontSize: 11, color: 'var(--warning)', marginTop: 6, lineHeight: 1.5 }}>
+                  {modelInfo.warnings.map((w, i) => (
+                    <div key={i}>⚠ {w}</div>
+                  ))}
+                </div>
+              )}
+              {modelInfo.normalizations.length > 0 && (
+                <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 6, lineHeight: 1.5 }}>
+                  {modelInfo.normalizations.map((n, i) => (
+                    <div key={i}>ℹ {n}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="panel__footer">

@@ -371,6 +371,8 @@ export interface ModelAsset {
   mime?: string
   /** Phase 2.5-B: analyzer statistics (optional, from the backend - never guessed). */
   glbStats?: GlbStats
+  /** Phase 2.5-C: future normalization notes (optional; empty = never shown). */
+  normalizations?: string[]
 }
 
 /* ------------------------------------------------------------------------ */

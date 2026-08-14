@@ -4,6 +4,12 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 
 export type CameraPreset = 'front' | 'back' | 'left' | 'right' | 'top' | 'iso'
 
+export interface ModelInfo {
+  dimensions: { x: number; y: number; z: number }
+  center: { x: number; y: number; z: number }
+  bounds: { min: [number, number, number]; max: [number, number, number] }
+}
+
 interface TweenTarget {
   pos: THREE.Vector3
   target: THREE.Vector3
@@ -147,6 +153,30 @@ export class ViewportManager {
   /** The currently displayed model root, or null when the scene is empty. */
   getModelRoot(): THREE.Group | null {
     return this.modelRoot
+  }
+
+  /**
+   * Pure read of the loaded model's WORLD-space Box3 (after load). Does not
+   * modify geometry and never affects fitToModel behavior. Returns null when
+   * no model is loaded or the bounds are empty.
+   */
+  getModelInfo(): ModelInfo | null {
+    if (!this.modelRoot) return null
+    const box = new THREE.Box3().setFromObject(this.modelRoot)
+    if (box.isEmpty()) return null
+    const size = box.getSize(new THREE.Vector3())
+    const center = box.getCenter(new THREE.Vector3())
+    const min = box.min
+    const max = box.max
+    const r = (v: number): number => Math.round(v * 10000) / 10000
+    return {
+      dimensions: { x: r(size.x), y: r(size.y), z: r(size.z) },
+      center: { x: r(center.x), y: r(center.y), z: r(center.z) },
+      bounds: {
+        min: [r(min.x), r(min.y), r(min.z)],
+        max: [r(max.x), r(max.y), r(max.z)]
+      }
+    }
   }
 
   private fitToModel(): void {
