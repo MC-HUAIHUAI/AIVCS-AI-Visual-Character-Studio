@@ -6,6 +6,7 @@ from ..jobs import cancel_job, create_job, get_job, get_model, get_model_record
 from ..providers.registry import get_provider, list_providers
 from ..schemas.asset import GlbStats
 from ..schemas.character import GenerateRequest, JobStatusResponse, ModelMetaResponse
+from ..services.vrm_exporter import VrmExportError, export_vrm
 from ..services.model_store import spec_hash
 
 router = APIRouter(prefix="/api/v1")
@@ -84,4 +85,21 @@ async def download_model(model_id: str):
         content=data,
         media_type=record.mime,
         headers={"Content-Disposition": f'attachment; filename="{model_id}.glb"'},
+    )
+
+
+@router.get("/models/{model_id}/vrm")
+async def export_model_vrm(model_id: str, body_type: str = "humanoid", name: str = "AIVCS Character"):
+    """Export a skinned GLB to a VRM 1.0 GLB (Phase 2.7-B)."""
+    data = get_model(model_id)
+    if data is None:
+        raise HTTPException(status_code=404, detail="Model not found")
+    try:
+        vrm_bytes = export_vrm(data, body_type=body_type, model_name=name)
+    except VrmExportError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return Response(
+        content=vrm_bytes,
+        media_type="model/gltf-binary",
+        headers={"Content-Disposition": f'attachment; filename="{model_id}.vrm"'},
     )

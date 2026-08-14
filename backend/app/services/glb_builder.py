@@ -212,6 +212,19 @@ def _bind_vertices(mesh: _Mesh, bones: list, positions: list[tuple[float, float,
     return joints, weights
 
 
+def serialize_glb(gltf: dict, buffer: bytes) -> bytes:
+    """Serialize a glTF dict + raw BIN buffer into a binary .glb."""
+    json_bytes = json.dumps(gltf, separators=(",", ":")).encode("utf-8")
+    _pad4(json_bytes)
+    buf = bytearray(buffer)
+    _pad4(buf)
+    total = 12 + 8 + len(json_bytes) + 8 + len(buf)
+    header = struct.pack("<4sII", b"glTF", 2, total)
+    json_chunk = struct.pack("<I4s", len(json_bytes), b"JSON") + json_bytes
+    bin_chunk = struct.pack("<I4s", len(buf), b"BIN\x00") + buf
+    return header + json_chunk + bin_chunk
+
+
 def build_glb(primitives: list[Primitive], scale: float = 1.0, bones: list | None = None) -> bytes:
     """Serialize primitives (scaled by `scale`) into a binary glTF 2.0 .glb.
 
@@ -409,11 +422,4 @@ def build_glb(primitives: list[Primitive], scale: float = 1.0, bones: list | Non
     if skinned:
         gltf["skins"] = skins
 
-    json_bytes = json.dumps(gltf, separators=(",", ":")).encode("utf-8")
-    _pad4(json_bytes)
-    _pad4(buffer)
-    total = 12 + 8 + len(json_bytes) + 8 + len(buffer)
-    header = struct.pack("<4sII", b"glTF", 2, total)
-    json_chunk = struct.pack("<I4s", len(json_bytes), b"JSON") + json_bytes
-    bin_chunk = struct.pack("<I4s", len(buffer), b"BIN\x00") + buffer
-    return header + json_chunk + bin_chunk
+    return serialize_glb(gltf, bytes(buffer))
