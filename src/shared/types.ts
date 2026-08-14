@@ -491,6 +491,25 @@ export interface GenerationJob {
   attempt?: number
 }
 
+/**
+ * Reserved contract for a future third-party image-to-3D provider
+ * (Phase 2.4-D-pre). NOT wired to any network/API in this release: even when
+ * `enabled` is true, nothing sends a request, calls a provider, or validates
+ * the address. `enabled` only marks the future config contract.
+ *
+ * API keys are intentionally NOT part of this type and must never enter
+ * ProjectData / CharacterSpec / ModelAsset - real credentials get secure
+ * storage only when the provider is actually implemented.
+ */
+export interface External3DProviderSettings {
+  /** Default false. Reserved flag for a future external provider. */
+  enabled: boolean
+  /** Vendor-agnostic provider id, e.g. "external-3d". */
+  providerId: string
+  /** Empty by default; never contacted while disabled. String/format check only. */
+  baseUrl: string
+}
+
 export const IPC_CHANNELS = {
   saveProject: 'project:save',
   loadProject: 'project:load',

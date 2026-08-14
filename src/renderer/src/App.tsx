@@ -4,6 +4,7 @@ import AssetsPanel from './components/AssetsPanel'
 import Viewport from './components/Viewport'
 import AIAssistantPanel from './components/AIAssistantPanel'
 import ProgressPanel from './components/ProgressPanel'
+import SettingsDialog from './components/SettingsDialog'
 import { useUIStore } from './store/uiStore'
 
 export default function App(): JSX.Element {
@@ -26,6 +27,7 @@ export default function App(): JSX.Element {
         <AIAssistantPanel />
       </div>
       <ProgressPanel />
+      <SettingsDialog />
     </div>
   )
 }

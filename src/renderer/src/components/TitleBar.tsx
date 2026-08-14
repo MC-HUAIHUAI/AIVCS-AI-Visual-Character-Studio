@@ -12,6 +12,7 @@ export default function TitleBar(): JSX.Element {
   const projectName = useProjectStore((s) => s.project.name)
   const specName = useProjectStore((s) => s.project.spec.name)
   const backendOnline = useUIStore((s) => s.backendOnline)
+  const openSettings = useUIStore((s) => s.openSettings)
   const [busy, setBusy] = useState(false)
 
   const handleNew = (): void => {
@@ -71,6 +72,9 @@ export default function TitleBar(): JSX.Element {
         </button>
         <button className="btn btn--ghost btn--sm" onClick={() => void handleExport()} disabled={busy}>
           {busy ? '导出中…' : '导出 GLB'}
+        </button>
+        <button className="btn btn--ghost btn--sm" onClick={openSettings}>
+          设置
         </button>
       </div>
 
