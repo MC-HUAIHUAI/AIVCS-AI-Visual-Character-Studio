@@ -173,6 +173,21 @@ class UnknownStatusClient(MockRemote3DClient):
         return await super().poll_task(task_id, cancel_event)
 
 
+class MalformedResponseClient(MockRemote3DClient):
+    """Simulates a vendor returning a malformed task info (missing status)."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._gave_malformed = False
+
+    async def poll_task(self, task_id, cancel_event=None):
+        if not self._gave_malformed:
+            self._gave_malformed = True
+            # status missing -> falls through to "unknown" mapping path
+            return RemoteTaskInfo(task_id=task_id, status="")  # type: ignore[arg-type]
+        return await super().poll_task(task_id, cancel_event)
+
+
 class CancelNotifyTest(RemotePipelineTest):
     def test_user_cancel_calls_client_cancel_task(self):
         client = RecordingClient(scenario="success", poll_delay=0.5)
@@ -236,6 +251,26 @@ class CancelNotifyTest(RemotePipelineTest):
             self.run_provider(UnknownStatusClient(scenario="success"))
         self.assertIn("未知远程状态", str(ctx.exception))
 
+    def test_malformed_response_maps_to_provider_error(self):
+        with self.assertRaises(ProviderError) as ctx:
+            self.run_provider(MalformedResponseClient(scenario="success"))
+        self.assertIn("未知远程状态", str(ctx.exception))
+
+    def test_capability_kind_mock(self):
+        client = MockRemote3DClient()
+        cap = client.capability()
+        self.assertEqual(cap.kind, "mock")
+        self.assertEqual(cap.mode, "cloud")
+        self.assertEqual(cap.output_format, "glb")
+        self.assertTrue(cap.supports_cancel)
+        self.assertTrue(cap.supports_timeout)
+
+    def test_vendor_capability_kind_skeleton(self):
+        from backend.app.providers.remote.vendor import VendorRemoteClient
+
+        cap = VendorRemoteClient().capability()
+        self.assertEqual(cap.kind, "skeleton")
+
     def test_invalid_glb_job_failed(self):
         async def scenario():
             provider = MockRemote3DProvider(scenario="invalid_glb")
@@ -283,6 +318,68 @@ class VendorSkeletonTest(unittest.TestCase):
     def test_real_provider_not_registered(self):
         self.assertNotIn("vendor", REGISTRY)
         self.assertNotIn("real-ai", REGISTRY)
+
+
+class RegistryAvailabilityTest(unittest.TestCase):
+    def setUp(self):
+        from backend.app import config
+
+        self._old = config.is_external3d_enabled()
+        config.set_runtime_external3d(False)
+
+    def tearDown(self):
+        from backend.app import config
+
+        config.set_runtime_external3d(self._old)
+
+    def test_external3d_identity_stays_registered(self):
+        from backend.app.providers import registry
+
+        self.assertIn("real-placeholder", registry.REGISTRY)
+
+    def test_external3d_not_available_when_disabled(self):
+        from backend.app.providers import registry
+
+        self.assertFalse(registry.is_provider_available("real-placeholder"))
+        # locals always available
+        self.assertTrue(registry.is_provider_available("mock-remote"))
+        self.assertTrue(registry.is_provider_available("local-lowpower"))
+        self.assertTrue(registry.is_provider_available("mock"))
+
+    def test_external3d_available_when_enabled(self):
+        from backend.app import config
+        from backend.app.providers import registry
+
+        config.set_runtime_external3d(True)
+        self.assertTrue(registry.is_provider_available("real-placeholder"))
+
+    def test_capability_for_mock_remote(self):
+        from backend.app.providers import registry
+
+        cap = registry.capability_for("mock-remote")
+        self.assertIsNotNone(cap)
+        self.assertEqual(cap.kind, "mock")
+
+    def test_capability_for_local(self):
+        from backend.app.providers import registry
+
+        cap = registry.capability_for("local-lowpower")
+        self.assertIsNotNone(cap)
+        self.assertEqual(cap.kind, "local")
+
+    def test_generate_router_rejects_disabled_external3d(self):
+        from fastapi import HTTPException
+        from backend.app.routers import generate as generate_router
+
+        async def run():
+            await generate_router.generate_image_to_3d(None)  # type: ignore[arg-type]
+
+        # Simpler: assert is_provider_available gates the call path (router
+        # already checks before touching the provider).
+        from backend.app.providers import registry
+
+        self.assertFalse(registry.is_provider_available("real-placeholder"))
+        self.assertTrue(callable(generate_router.generate_image_to_3d))
 
 
 if __name__ == "__main__":

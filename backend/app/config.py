@@ -73,8 +73,13 @@ KIMI_TIMEOUT_SECONDS = float(os.environ.get("AIVCS_KIMI_TIMEOUT_SECONDS", "240")
 #
 # The renderer persists App Settings (Vision / External 3D) via the Electron
 # main process (safeStorage). The effective provider config on the backend is:
-#   - env vars always win (AIVCS_KIMI_*) to preserve existing deployments;
-#   - otherwise a runtime override set by the main process over localhost.
+#   - USER AppSettings (runtime override) takes priority - a user who enters
+#     their own key in Settings must NEVER silently fall back to a developer's
+#     .env key;
+#   - env vars (AIVCS_KIMI_*) act only as a developer/local fallback when no
+#     user runtime config is set;
+#   - otherwise the provider is not configured (mock).
+# The `source` is exposed (never the key) so UI/debug can confirm the origin.
 # Only the main process may set runtime config; it authenticates with a random
 # per-process token written to a local runtime file (never over GET, never
 # logged, never in responses, no external proxy).
@@ -115,14 +120,55 @@ def set_runtime_vision(base_url: str = "", model: str = "", api_key: str = "") -
 
 
 def effective_kimi_config() -> dict[str, str]:
-    """Return the effective Kimi config: env wins, runtime is the fallback."""
+    """Return the effective Kimi config.
+
+    Priority (hard rule):
+        1. user AppSettings (runtime) - wins whenever it has a key;
+        2. env vars (AIVCS_KIMI_*) - developer/local fallback only;
+        3. otherwise mock (api_key empty).
+
+    `source` reports the origin ("runtime" | "env" | "mock"). The apiKey is
+    never logged, never returned in API responses, never part of project data.
+    """
+    runtime_key = _RUNTIME_VISION.get("api_key", "")
+    if runtime_key:
+        return {
+            "api_key": runtime_key,
+            "base_url": _RUNTIME_VISION.get("base_url") or KIMI_BASE_URL,
+            "model": _RUNTIME_VISION.get("model") or KIMI_MODEL,
+            "source": "runtime",
+        }
     if KIMI_API_KEY:
-        return {"api_key": KIMI_API_KEY, "base_url": KIMI_BASE_URL, "model": KIMI_MODEL}
+        return {
+            "api_key": KIMI_API_KEY,
+            "base_url": KIMI_BASE_URL,
+            "model": KIMI_MODEL,
+            "source": "env",
+        }
     return {
-        "api_key": _RUNTIME_VISION.get("api_key", ""),
-        "base_url": _RUNTIME_VISION.get("base_url") or KIMI_BASE_URL,
-        "model": _RUNTIME_VISION.get("model") or KIMI_MODEL,
+        "api_key": "",
+        "base_url": KIMI_BASE_URL,
+        "model": KIMI_MODEL,
+        "source": "mock",
     }
+
+
+# Runtime external-3d availability toggle (Phase 3-5B). Provider identity stays
+# registered regardless; this only gates real generation. Default False.
+_runtime_external3d_enabled: bool = False
+
+
+def set_runtime_external3d(enabled: bool) -> None:
+    """Set external-3d availability (main process only). Does NOT unregister."""
+    global _runtime_external3d_enabled
+    _runtime_external3d_enabled = bool(enabled)
+    from .providers import registry as _3d_registry
+
+    _3d_registry.set_external3d_enabled(_runtime_external3d_enabled)
+
+
+def is_external3d_enabled() -> bool:
+    return _runtime_external3d_enabled
 
 BACKEND_NAME = "aivcs-backend"
 BACKEND_VERSION = "0.1.0"

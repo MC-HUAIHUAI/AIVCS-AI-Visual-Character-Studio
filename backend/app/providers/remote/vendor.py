@@ -21,6 +21,7 @@ import os
 from ...schemas.character import CharacterSpec
 from ...schemas.vision import VisionImageInput
 from ..base import CancellationToken
+from .contract import ProviderCapability
 from .remote_base import IRemote3DClient, RemoteTaskError, RemoteTaskInfo
 
 VENDOR_API_KEY_ENV = "AIVCS_REAL3D_API_KEY"
@@ -31,6 +32,17 @@ class VendorRemoteClient(IRemote3DClient):
 
     def __init__(self, api_key: str | None = None):
         self._api_key = api_key if api_key is not None else os.environ.get(VENDOR_API_KEY_ENV, "")
+
+    def capability(self) -> ProviderCapability:
+        return ProviderCapability(
+            mode="cloud",
+            gpu_required=False,
+            max_references=4,
+            output_format="glb",
+            supports_cancel=True,
+            supports_timeout=True,
+            kind="skeleton",
+        )
 
     @property
     def configured(self) -> bool:

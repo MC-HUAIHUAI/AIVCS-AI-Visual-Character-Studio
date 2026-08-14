@@ -20,6 +20,27 @@ export async function backendHealth(): Promise<boolean> {
   }
 }
 
+export interface ProviderStatusInfo {
+  id: string
+  available: boolean
+  capability: {
+    mode: string
+    gpuRequired: boolean
+    maxReferences: number
+    outputFormat: string
+    supportsCancel: boolean
+    supportsTimeout: boolean
+    kind: string
+  } | null
+}
+
+/** Reads provider availability + capability metadata from the local backend (no key). */
+export async function fetchProviderStatus(): Promise<ProviderStatusInfo[]> {
+  const res = await fetch(`${AIVCS_BACKEND_URL}/api/v1/providers`, { signal: AbortSignal.timeout(2500) })
+  if (!res.ok) return []
+  return (await res.json()) as ProviderStatusInfo[]
+}
+
 export interface CreateGenerationRequest {
   backendProviderId?: string
   spec: CharacterSpec
@@ -185,7 +206,8 @@ export class BackendImage3DProvider implements AIImage3DProvider {
     outputFormat: 'glb' as const,
     supportsCancel: true,
     supportsTimeout: true,
-    backendId: 'mock'
+    backendId: 'mock',
+    kind: 'mock' as const
   }
 
   async generate(
@@ -215,7 +237,8 @@ export class LocalLowPower3DProvider implements AIImage3DProvider {
     outputFormat: 'glb' as const,
     supportsCancel: true,
     supportsTimeout: true,
-    backendId: 'local-lowpower'
+    backendId: 'local-lowpower',
+    kind: 'local' as const
   }
 
   async generate(
@@ -246,7 +269,8 @@ export class MockRemote3DProvider implements AIImage3DProvider {
     outputFormat: 'glb' as const,
     supportsCancel: true,
     supportsTimeout: true,
-    backendId: 'mock-remote'
+    backendId: 'mock-remote',
+    kind: 'mock' as const
   }
 
   async generate(

@@ -3,7 +3,7 @@ from fastapi.responses import Response
 
 from .. import config
 from ..jobs import cancel_job, create_job, get_job, get_model, get_model_record
-from ..providers.registry import get_provider, list_providers
+from ..providers.registry import capability_for, get_provider, is_provider_available, list_providers
 from ..schemas.asset import GlbStats
 from ..schemas.character import GenerateRequest, JobStatusResponse, ModelMetaResponse
 from ..services.vrm_exporter import VrmExportError, export_vrm
@@ -22,8 +22,27 @@ async def health():
     }
 
 
+@router.get("/providers")
+async def list_providers_with_capabilities():
+    """Provider list with capability + availability metadata (Phase 3-5B).
+
+    Provider identity is registered once; `available` reflects whether it may
+    run real generation right now (external-3d only when enabled). No network.
+    """
+    return [
+        {
+            "id": pid,
+            "available": is_provider_available(pid),
+            "capability": capability_for(pid),
+        }
+        for pid in list_providers()
+    ]
+
+
 @router.post("/generate/image-to-3d", status_code=202)
 async def generate_image_to_3d(request: GenerateRequest):
+    if not is_provider_available(request.provider):
+        raise HTTPException(status_code=400, detail=f"Provider '{request.provider}' 未启用或不可用（离线模式）")
     provider = get_provider(request.provider)
     # Safe default deadline when the caller omits timeoutSeconds; an explicit
     # value always wins (a 0 is treated as an explicit immediate timeout).

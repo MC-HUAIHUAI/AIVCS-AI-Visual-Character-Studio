@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from ...schemas.character import CharacterSpec
 from ...schemas.vision import VisionImageInput
 from ..base import CancellationToken
+from .contract import ProviderCapability
 
 REMOTE_STATUSES = ("queued", "running", "done", "failed", "timed_out", "cancelled")
 
@@ -39,6 +40,18 @@ class IRemote3DClient(ABC):
     """Adapter contract implemented by a vendor (or a mock)."""
 
     id: str = "base-remote"
+
+    def capability(self) -> ProviderCapability:
+        """Capability descriptor; default reports an unavailable skeleton."""
+        return ProviderCapability(
+            mode="cloud",
+            gpu_required=False,
+            max_references=4,
+            output_format="glb",
+            supports_cancel=True,
+            supports_timeout=True,
+            kind="skeleton",
+        )
 
     @abstractmethod
     async def create_task(

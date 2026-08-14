@@ -17,17 +17,25 @@ import json
 import urllib.request
 
 from fastapi import APIRouter, Header, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from .. import config
 
 router = APIRouter(prefix="/api/v1/config")
 
 
-class VisionConfigRequest(BaseModel):
-    base_url: str = ""
+class _CamelModel(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class VisionConfigRequest(_CamelModel):
+    base_url: str = Field(default="", alias="baseUrl")
     model: str = ""
-    api_key: str = ""
+    api_key: str = Field(default="", alias="apiKey")
+
+
+class External3DConfigRequest(_CamelModel):
+    enabled: bool = False
 
 
 def _require_token(x_aivcs_config_token: str | None) -> None:
@@ -44,9 +52,25 @@ async def set_vision_config(req: VisionConfigRequest, x_aivcs_config_token: str 
     effective = config.effective_kimi_config()
     return {
         "ok": True,
-        # Never return the apiKey; only report whether a key is present.
+        # Never return the apiKey; only report whether a key is present + source.
         "visionConfigured": bool(effective["api_key"]),
-        "source": "env" if config.KIMI_API_KEY else "runtime",
+        "source": effective["source"],
+    }
+
+
+@router.post("/external3d")
+async def set_external3d_enabled(req: External3DConfigRequest, x_aivcs_config_token: str | None = Header(default=None)):
+    """Toggle external-3d availability (Phase 3-5B).
+
+    Does NOT unregister the provider identity. When disabled, the external-3d
+    adapter cannot run real generation and no network request is made. The apiKey
+    is never part of this call or response.
+    """
+    _require_token(x_aivcs_config_token)
+    config.set_runtime_external3d(req.enabled)
+    return {
+        "ok": True,
+        "external3dEnabled": config.is_external3d_enabled(),
     }
 
 

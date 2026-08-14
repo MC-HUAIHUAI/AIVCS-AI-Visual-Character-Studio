@@ -35,20 +35,48 @@ class RuntimeVisionConfigTest(unittest.TestCase):
 
         vision_registry.rebuild_registry()
 
-    def test_effective_config_env_wins(self):
-        config.set_runtime_vision(base_url="https://runtime.example.com", api_key="runtime-key")
+    def test_runtime_wins_over_env(self):
+        # User Settings (runtime) MUST override a developer .env key.
+        config.set_runtime_vision(base_url="https://user.example.com", api_key="user-key")
+        config.KIMI_API_KEY = "env-key"
+        config.KIMI_BASE_URL = "https://env.example.com"
+        eff = config.effective_kimi_config()
+        self.assertEqual(eff["api_key"], "user-key")
+        self.assertEqual(eff["base_url"], "https://user.example.com")
+        self.assertEqual(eff["source"], "runtime")
+
+    def test_only_env_falls_back_to_env(self):
+        config.set_runtime_vision()
         config.KIMI_API_KEY = "env-key"
         config.KIMI_BASE_URL = "https://env.example.com"
         eff = config.effective_kimi_config()
         self.assertEqual(eff["api_key"], "env-key")
-        self.assertEqual(eff["base_url"], "https://env.example.com")
+        self.assertEqual(eff["source"], "env")
 
-    def test_effective_config_runtime_fallback(self):
+    def test_only_runtime(self):
         config.set_runtime_vision(base_url="https://runtime.example.com", api_key="runtime-key", model="m")
+        config.KIMI_API_KEY = ""
         eff = config.effective_kimi_config()
         self.assertEqual(eff["api_key"], "runtime-key")
         self.assertEqual(eff["base_url"], "https://runtime.example.com")
         self.assertEqual(eff["model"], "m")
+        self.assertEqual(eff["source"], "runtime")
+
+    def test_none_configured_mock(self):
+        config.set_runtime_vision()
+        config.KIMI_API_KEY = ""
+        eff = config.effective_kimi_config()
+        self.assertEqual(eff["api_key"], "")
+        self.assertEqual(eff["source"], "mock")
+
+    def test_runtime_cleared_falls_back_to_env(self):
+        # runtime key cleared -> env fallback allowed.
+        config.set_runtime_vision(base_url="https://user.example.com", api_key="user-key")
+        config.KIMI_API_KEY = "env-key"
+        config.set_runtime_vision()  # user clears Settings
+        eff = config.effective_kimi_config()
+        self.assertEqual(eff["api_key"], "env-key")
+        self.assertEqual(eff["source"], "env")
 
     def test_no_key_anywhere(self):
         config.set_runtime_vision()
@@ -82,6 +110,7 @@ class RuntimeVisionConfigTest(unittest.TestCase):
         result = asyncio.run(run())
         self.assertTrue(result["ok"])
         self.assertIn("visionConfigured", result)
+        self.assertIn("source", result)
         self.assertNotIn("apiKey", result)
         self.assertNotIn("secret-key", str(result))
 
@@ -93,6 +122,45 @@ class RuntimeVisionConfigTest(unittest.TestCase):
         vision_registry.rebuild_registry()
         self.assertNotIn("kimi", vision_registry.REGISTRY)
         self.assertIn("mock", vision_registry.REGISTRY)
+
+    def test_external3d_toggle_requires_token(self):
+        from fastapi import HTTPException
+
+        async def run():
+            await config_router.set_external3d_enabled(
+                config_router.External3DConfigRequest(enabled=True),
+                x_aivcs_config_token=None,
+            )
+
+        with self.assertRaises(HTTPException) as ctx:
+            asyncio.run(run())
+        self.assertEqual(ctx.exception.status_code, 403)
+
+    def test_external3d_toggle_ok_keeps_identity(self):
+        async def run():
+            return await config_router.set_external3d_enabled(
+                config_router.External3DConfigRequest(enabled=True),
+                x_aivcs_config_token=config.LOCAL_CONFIG_TOKEN,
+            )
+
+        result = asyncio.run(run())
+        self.assertTrue(result["ok"])
+        self.assertTrue(result["external3dEnabled"])
+        # identity still registered, just enabled
+        from backend.app.providers import registry
+
+        self.assertIn("real-placeholder", registry.REGISTRY)
+        self.assertTrue(registry.is_provider_available("real-placeholder"))
+
+    def test_external3d_default_disabled(self):
+        from backend.app import config as cfg
+
+        cfg.set_runtime_external3d(False)
+        from backend.app.providers import registry
+
+        self.assertFalse(registry.is_provider_available("real-placeholder"))
+        self.assertTrue(registry.is_provider_available("mock"))
+        self.assertTrue(registry.is_provider_available("mock-remote"))
 
 
 if __name__ == "__main__":

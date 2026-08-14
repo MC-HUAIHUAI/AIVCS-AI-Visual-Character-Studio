@@ -16,6 +16,7 @@ from ...schemas.character import CharacterSpec
 from ...schemas.vision import VisionImageInput
 from ...services.glb_builder import Primitive, build_glb
 from ..base import CancellationToken
+from .contract import ProviderCapability
 from .remote_base import IRemote3DClient, RemoteTaskError, RemoteTaskInfo
 
 _MOCK_GLB = build_glb([Primitive("box", (0.5, 0.5, 0.5), color="#4466AA")])
@@ -36,6 +37,17 @@ class MockRemote3DClient(IRemote3DClient):
         self.poll_delay = poll_delay
         self.create_error = create_error
         self._polls: dict[str, int] = {}
+
+    def capability(self) -> ProviderCapability:
+        return ProviderCapability(
+            mode="cloud",
+            gpu_required=False,
+            max_references=4,
+            output_format="glb",
+            supports_cancel=True,
+            supports_timeout=True,
+            kind="mock",
+        )
 
     async def create_task(
         self,

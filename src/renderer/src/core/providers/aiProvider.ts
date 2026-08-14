@@ -16,6 +16,8 @@ export interface ProviderCapabilities {
   supportsTimeout: boolean
   /** Backend provider id to request when the job runs server-side. */
   backendId: string
+  /** Phase 3-5B: provenance class - 'mock' | 'real' | 'skeleton' | 'local'. */
+  kind?: 'mock' | 'real' | 'skeleton' | 'local'
 }
 
 /**
