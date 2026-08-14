@@ -145,6 +145,16 @@ npm run dev
 - **明确不做（Phase 2.5）**：GLB 重写、坐标/单位转换、Y-up 自动翻转、Rig / Skinning / VRM。
 - **明确记录**：Phase 2.5 **不需要真实 3D API，也未发生任何真实 API 请求**（零联网、零 Key、零充值）。
 
+## Phase 2.6 — Rig / Skinned GLB（当前状态）
+
+- **RigBuilder**（`backend/app/services/rig_builder.py` + `rig_profiles.py`）：CharacterSpec → `BoneNode[]`（父子 / T-pose / heightCm 缩放 / anatomy 附加骨骼：ear/horn/antler/wing/tail 单/多链；确定性；custom 回退 humanoid）。
+- **Skinned GLB**（`glb_builder.build_glb(..., bones=)`）：父子节点层级 + `skins`（joints + **bind-pose world 逆矩阵** inverseBindMatrices）+ 每顶点 `JOINTS_0`(VEC4/UINT8) / `WEIGHTS_0`(VEC4/float)；绑定在 **model space** 完成、**不改 POSITION**；无 bones 时输出**字节级不变**。
+- **LocalLowPower 可选 Rig**：`AIVCS_LOCAL3D_RIG_ENABLED`（默认 **false**）开启后输出 SkinnedMesh GLB；默认保持旧非蒙皮行为字节稳定。
+- **验证**：`tools/check_skinned_glb.cjs` 作为 **Three.js SkinnedMesh 硬门槛**（SkinnedMesh>0、skeleton.bones>0、skinIndex/skinWeight、bounds 非空、bones==skins.joints）；已通过 humanoid/quadruped + Job→ModelStore 管线。
+- **兼容**：ModelStore / glb_analyzer / 既有 Job 管线在开关两种模式下均正常；`validate_glb` 门禁语义未改。
+- **明确不做（Phase 2.6）**：动画、物理、VRM（Phase 2.7）；真实厂商接入。
+- **明确记录**：Phase 2.6 纯本地实现，**未发生任何真实 API 请求**（零联网、零 Key、零充值）。
+
 ## Mock 功能（模拟，非真实实现）
 
 - **Mock AI Provider**（前端本地 + 后端各一份）：按角色类型返回对应演示 GLB（人类→人形、非人类→兽人狐），模拟各阶段耗时与进度；无需网络、无需任何 AI API
