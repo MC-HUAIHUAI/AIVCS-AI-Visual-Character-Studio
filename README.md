@@ -322,3 +322,66 @@ AIVCS Renderer (RuntimePicker / AssetsPanel / ProgressPanel)
   - T3 front+back：200 / stop / content 非空；`perView=2`；resolver 检出 5 项冲突（人物不同视角产生差异，鲁棒性正常处理）。
 - **已知限制：模型输出契约未稳定满足**——`perView[]` 在本次 2/2 返回，但早期（2.2-B.1）曾出现不返回 `perView` 的情况；`unified specPatch` 稳定。若 `perView` 缺失，管线走 Phase 2.2-C 的 fallback（不伪造、不崩溃），`conflicts` 使用后端 resolver 的真实返回。
 - 测试图（6 张像素风）：人类/兽人狐/猫/龙/机器人识别正确；模糊图正确返回低置信度与"无法确定角色物种"警告。
+
+## 运行要求
+
+### 基础功能
+
+AIVCS 的基础功能可以在普通 Windows 电脑上运行。
+
+| 项目 | 要求 |
+|---|---|
+| 操作系统 | Windows 10 / 11 64-bit |
+| CPU | x64 |
+| 内存 | 建议 4 GB 以上 |
+| 磁盘空间 | 建议 4 GB 以上 |
+| NVIDIA GPU | 基础功能不需要 |
+
+默认 Provider 为 `mock-local`，无需 NVIDIA GPU 或 CUDA 即可使用基础功能。
+
+### 本地 AI 3D
+
+`embedded-ai-3d` 目前使用 Hunyuan3D-2mini 作为目标本地 AI 3D Runtime。
+
+| 项目 | Shape | Shape + Paint |
+|---|---:|---:|
+| GPU | NVIDIA CUDA | NVIDIA CUDA |
+| 最低显存 | ≥ 6 GB | ≥ 16 GB |
+| CUDA | 必需 | 必需 |
+| 操作系统 | Windows | Windows |
+
+#### GPU 支持情况
+
+| GPU | Hunyuan3D |
+|---|---|
+| NVIDIA CUDA GPU | ✅ 目标支持 |
+| Intel GPU | ❌ 暂不支持 |
+| AMD GPU | ❌ 暂不支持 |
+| 无 GPU | ❌ 不支持 |
+
+> ⚠️ 注意：v0.3.0 尚未完成 NVIDIA Windows 真机实测。
+>
+> 当前开发机器为 Intel UHD 610，因此真实 Hunyuan3D 推理尚未验证。
+> Hunyuan3D Runtime 在不满足硬件要求时会被明确标记为不可用，不会自动切换到 Mock。
+
+### 模型与 Runtime
+
+Hunyuan3D 模型权重**不会随 AIVCS GitHub 仓库或 Release 一起发布**。
+
+用户需要在满足硬件要求后，通过 Runtime 安装流程单独安装。
+
+Hunyuan3D-2 使用 Tencent Hunyuan 3D Community License，具体许可限制请查看项目中的 `THIRD_PARTY_NOTICES.md`。
+
+### 重要说明
+
+AIVCS 不会在真实 AI Provider 不可用时静默回退到 Mock。
+
+例如：
+
+- NVIDIA GPU 不满足要求 → 明确提示硬件不兼容
+- Runtime 未安装 → 明确提示 Runtime 未安装
+- 模型未安装 → 明确提示模型未安装
+- License 未接受 → 阻止启动
+- Runtime 启动失败 → 明确报告错误
+
+`mock-local` 仍然是 AIVCS v0.3.0 的默认 Provider。
