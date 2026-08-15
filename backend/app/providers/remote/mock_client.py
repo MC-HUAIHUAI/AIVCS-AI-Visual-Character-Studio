@@ -54,6 +54,7 @@ class MockRemote3DClient(IRemote3DClient):
         spec: CharacterSpec,
         references: list[VisionImageInput],
         cancel_event: CancellationToken | None = None,
+        runtime_id: str | None = None,
     ) -> RemoteTaskInfo:
         if self.create_error:
             raise RemoteTaskError("create failed (mock)")

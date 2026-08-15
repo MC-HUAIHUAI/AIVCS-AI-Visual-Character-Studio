@@ -26,7 +26,9 @@ const api: AivcsApi = {
     kind: 'vision' | 'external3d',
     settings: AppSettings
   ): Promise<{ ok: boolean; error?: string }> =>
-    ipcRenderer.invoke(IPC_CHANNELS.settingsTestConnection, kind, settings)
+    ipcRenderer.invoke(IPC_CHANNELS.settingsTestConnection, kind, settings),
+  getDemoModel: (characterType: string): Promise<{ ok: boolean; bytes?: ArrayBuffer; error?: string }> =>
+    ipcRenderer.invoke(IPC_CHANNELS.getDemoModel, characterType)
 }
 
 contextBridge.exposeInMainWorld('aivcs', api)

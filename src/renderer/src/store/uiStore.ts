@@ -11,6 +11,8 @@ interface UIState {
   selectedReferenceIds: string[]
   /** Phase 3-5A: app-level provider settings (persisted via main process). */
   appSettings: AppSettings
+  /** Phase 2.5: selected AI 3D runtime id (only meaningful when provider=embedded-ai-3d). */
+  selectedRuntimeId: string | null
   settingsOpen: boolean
   portrait2dOpen: boolean
 
@@ -24,6 +26,7 @@ interface UIState {
   loadAppSettings: () => Promise<void>
   saveAppSettings: () => Promise<{ ok: boolean; error?: string }>
   testProviderConnection: (kind: 'vision' | 'external3d') => Promise<{ ok: boolean; error?: string }>
+  setSelectedRuntimeId: (id: string | null) => void
   openSettings: () => void
   closeSettings: () => void
   openPortrait2D: () => void
@@ -36,6 +39,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   cameraPreset: 'iso',
   selectedReferenceIds: [],
   appSettings: defaultAppSettings(),
+  selectedRuntimeId: null,
   settingsOpen: false,
   portrait2dOpen: false,
 
@@ -82,6 +86,8 @@ export const useUIStore = create<UIState>((set, get) => ({
   testProviderConnection: async (kind) => {
     return window.aivcs.testProviderConnection(kind, get().appSettings)
   },
+
+  setSelectedRuntimeId: (id) => set({ selectedRuntimeId: id }),
 
   openSettings: () => set({ settingsOpen: true }),
 

@@ -99,6 +99,10 @@ class GenerateRequest(_CamelModel):
     # Phase 3-3: optional render-layer (derived CharacterAsset) that drives the
     # parameterized primitive topology. Backward compatible - old clients omit it.
     character_asset: CharacterAsset | None = Field(default=None, alias="characterAsset")
+    # Phase 3-C: optional explicit embedded runtime selection (e.g.
+    # "hunyuan3d-2mini"). When omitted the embedded provider picks the first
+    # installed+compatible runtime. Never applies to mock/local providers.
+    runtime_id: str | None = Field(default=None, alias="runtimeId")
 
     @field_validator("references")
     @classmethod
@@ -124,6 +128,8 @@ class JobResult(_CamelModel):
     source_job_id: str | None = Field(default=None, alias="sourceJobId")
     # Phase 2.5-B analyzer statistics (optional).
     stats: GlbStats | None = None
+    # Phase 3-J: texture/paint output metadata (absent/null = shape-only).
+    texture: dict | None = None
 
 
 class ModelMetaResponse(_CamelModel):
@@ -138,6 +144,8 @@ class ModelMetaResponse(_CamelModel):
     spec_hash: str = Field(alias="specHash")
     created_at: float = Field(alias="createdAt")
     stats: GlbStats | None = None
+    # Phase 3-G: optional texture/paint output metadata (absent/null = shape-only).
+    texture: dict | None = None
 
 
 class JobStatusResponse(_CamelModel):

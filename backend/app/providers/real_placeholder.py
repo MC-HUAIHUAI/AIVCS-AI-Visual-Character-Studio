@@ -26,6 +26,7 @@ class RealImage3DProviderPlaceholder(AIImage3DProvider):
         on_progress: ProgressCallback,
         cancel_event: CancellationToken | None = None,
         character_asset=None,
+        runtime_id: str | None = None,
     ) -> bytes:
         raise ProviderError(
             "The real image-to-3D provider is not implemented yet. Use the Mock provider in Demo Mode."

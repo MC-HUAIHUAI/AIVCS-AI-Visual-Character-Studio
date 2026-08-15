@@ -1,4 +1,4 @@
-import type { CharacterAsset, CharacterSpec, GenerationJob, GenerationJobStep, GlbStats, ImageAsset, ModelAsset, ModelFormat } from '@shared/types'
+import type { CharacterAsset, CharacterSpec, GenerationJob, GenerationJobStep, GlbStats, ImageAsset, ModelAsset, ModelFormat, ModelTextureMeta } from '@shared/types'
 import type { VisionImageInput } from '../providers/visionProvider'
 
 /**
@@ -101,6 +101,8 @@ export interface JobResultDto {
   provider_id?: string
   source_job_id?: string
   stats?: GlbStats
+  /** Phase 3-J: texture/paint output metadata (absent/null = shape-only). */
+  texture?: ModelTextureMeta | null
 }
 
 export interface JobDto {
@@ -150,6 +152,8 @@ export interface ModelAssetMeta {
   mime?: string
   filePath?: string | null
   glbStats?: GlbStats
+  texture?: ModelTextureMeta | null
+  sourceModelId?: string
 }
 
 /** Maps generation result metadata to ModelAsset fields (no guessing). */
@@ -169,7 +173,9 @@ export function modelAssetFromResult(
     sourceJobId: meta.sourceJobId,
     sizeBytes: meta.sizeBytes,
     mime: meta.mime,
-    glbStats: meta.glbStats
+    glbStats: meta.glbStats,
+    texture: meta.texture,
+    sourceModelId: meta.sourceModelId
   }
 }
 

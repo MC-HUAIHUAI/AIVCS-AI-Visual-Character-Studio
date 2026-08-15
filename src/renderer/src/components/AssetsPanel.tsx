@@ -1,7 +1,13 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useProjectStore } from '../store/projectStore'
 import { useUIStore } from '../store/uiStore'
-import { buildModelInfoRows } from '../core/spec/modelInfoLogic'
+import {
+  buildModelInfoRows,
+  canConvertToVrm,
+  textureStatusLabel
+} from '../core/spec/modelInfoLogic'
+import { modelAssetFromResult } from '../core/spec/generationLogic'
+import { convertModelToVrm } from '../core/providers/httpProvider'
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -29,10 +35,60 @@ export default function AssetsPanel(): JSX.Element {
   const importImages = useProjectStore((s) => s.importImages)
   const removeImage = useProjectStore((s) => s.removeImage)
   const removeModel = useProjectStore((s) => s.removeModel)
+  const addModel = useProjectStore((s) => s.addModel)
   const clearReferences = useUIStore((s) => s.clearReferences)
 
+  const [converting, setConverting] = useState(false)
+  const [vrmError, setVrmError] = useState<string | null>(null)
+
   const selectedModel = project.models.find((m) => m.id === selectedModelId) ?? null
-  const modelInfo = useMemo(() => (selectedModel ? buildModelInfoRows(selectedModel) : null), [selectedModel])
+  const hasDerivedVrm = selectedModel
+    ? project.models.some((m) => m.sourceModelId === selectedModel.id)
+    : false
+  const modelInfo = useMemo(
+    () =>
+      selectedModel
+        ? buildModelInfoRows(selectedModel, {
+            hasDerivedVrm,
+            bodyType: project.spec.bodyType
+          })
+        : null,
+    [selectedModel, hasDerivedVrm, project.spec.bodyType]
+  )
+
+  const canVrm = selectedModel ? canConvertToVrm(project.spec.bodyType) : false
+  const selectedTexture = selectedModel ? textureStatusLabel(selectedModel) : null
+
+  const handleConvertToVrm = async (): Promise<void> => {
+    if (!selectedModel) return
+    setConverting(true)
+    setVrmError(null)
+    try {
+      const res = await convertModelToVrm(selectedModel.id, {
+        bodyType: project.spec.bodyType,
+        characterType: project.spec.characterType,
+        modelName: project.spec.name || 'AIVCS Character'
+      })
+      if (!res.ok || !res.bytes || !res.vrmModelId) {
+        setVrmError(res.error ?? 'VRM 转换失败')
+        return
+      }
+      const vrmModel = modelAssetFromResult(res.vrmModelId, `${selectedModel.name} (VRM)`, {
+        format: 'vrm',
+        mime: 'model/gltf-binary',
+        providerId: 'local3d-rig',
+        sourceJobId: selectedModel.sourceJobId,
+        sourceModelId: selectedModel.id,
+        sizeBytes: res.bytes.byteLength,
+        glbStats: res.stats
+      })
+      addModel(vrmModel, res.bytes) // adds as a NEW model; original GLB preserved
+    } catch (err) {
+      setVrmError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setConverting(false)
+    }
+  }
 
   return (
     <aside className="panel panel--left">
@@ -54,10 +110,16 @@ export default function AssetsPanel(): JSX.Element {
               className={`asset-item${selectedModelId === model.id ? ' asset-item--selected' : ''}`}
               onClick={() => selectModel(model.id)}
             >
-              <div className="asset-item__thumb asset-item__thumb--model">3D</div>
+              <div className="asset-item__thumb asset-item__thumb--model">
+                {model.format === 'vrm' ? 'VRM' : '3D'}
+              </div>
               <div className="asset-item__info">
                 <div className="asset-item__name">{model.name}</div>
-                <div className="asset-item__meta">{model.format.toUpperCase()}</div>
+                <div className="asset-item__meta">
+                  {model.format.toUpperCase()}
+                  {model.texture?.supported ? ' · 有纹理' : ' · shape-only'}
+                  {model.format === 'vrm' ? ' · VRM' : ''}
+                </div>
               </div>
               {sourceBadge(model.source)}
               {project.models.length > 1 && model.source !== 'demo' && (
@@ -154,6 +216,33 @@ export default function AssetsPanel(): JSX.Element {
                 </div>
               )}
             </div>
+
+            {selectedModel?.format !== 'vrm' && (
+              <div style={{ marginTop: 8 }}>
+                {canVrm ? (
+                  <button
+                    className="btn btn--sm btn--primary"
+                    disabled={converting}
+                    onClick={() => void handleConvertToVrm()}
+                  >
+                    {converting ? 'VRM 分析中…' : '转换为 VRM'}
+                  </button>
+                ) : (
+                  <div style={{ fontSize: 11, color: 'var(--warning)', lineHeight: 1.5 }}>
+                    不支持 VRM 骨骼绑定（当前角色为非人体 / 非 humanoid 体型）。
+                  </div>
+                )}
+                {vrmError && (
+                  <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 6, lineHeight: 1.5 }}>
+                    转换失败：{vrmError}
+                  </div>
+                )}
+                <div style={{ fontSize: 10.5, color: 'var(--text-faint)', marginTop: 4, lineHeight: 1.5 }}>
+                  转换生成独立的 VRM 模型，原始 GLB 保持不变。
+                  {selectedTexture ? ` · ${selectedTexture}` : ''}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

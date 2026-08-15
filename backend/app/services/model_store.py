@@ -40,6 +40,10 @@ class ModelRecord:
     # normalization notes. Stored as plain dicts so the JSON sidecar round-trips.
     stats: dict | None = None
     normalizations: list[str] = field(default_factory=list)
+    # Phase 3-G (optional, backward compatible): texture/paint output metadata
+    # (e.g. {"supported": true, "kind": "paint", "material": ...}). Absent/null
+    # means the model is shape-only.
+    texture: dict | None = None
 
 
 def spec_hash(spec: CharacterSpec) -> str:
@@ -75,6 +79,7 @@ class ModelStore:
         source_job_id: str,
         spec_hash: str,
         stats: dict | None = None,
+        texture: dict | None = None,
     ) -> ModelRecord:
         model_id = str(uuid.uuid4())
         target = self._model_path(model_id)
@@ -92,6 +97,7 @@ class ModelStore:
             created_at=time.time(),
             file_path=str(target),
             stats=stats,
+            texture=texture,
         )
         self._write_meta(record)
         return record

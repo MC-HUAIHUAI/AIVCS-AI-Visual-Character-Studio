@@ -111,6 +111,18 @@ def _pad4(buf: bytearray) -> None:
         buf += b"\x00"
 
 
+def parse_glb(data: bytes) -> tuple[dict, bytearray]:
+    """Parse a validated GLB into (gltf dict, BIN bytearray).
+
+    Shared by the analyzer / rigger / paint / VRM services so GLB parsing is
+    implemented exactly once (Phase 3-K). Raises ValueError on malformed input.
+    """
+    validate_glb(data)
+    clen, _ctype = struct.unpack("<I4s", data[12:20])
+    gltf = json.loads(data[20 : 20 + clen])
+    return gltf, bytearray(data[20 + clen + 8 :])
+
+
 def validate_glb(data: bytes) -> None:
     """Validate a GLB is structurally legal. Raises ValueError on failure.
 

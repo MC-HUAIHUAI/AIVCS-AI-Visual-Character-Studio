@@ -21,6 +21,7 @@ import {
 } from '../core/spec/generationLogic'
 import type { GenerationRequest, JobDto } from '../core/spec/generationLogic'
 import { useProjectStore } from './projectStore'
+import { useUIStore } from './uiStore'
 import { newId } from '../core/project/projectManager'
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
@@ -30,6 +31,9 @@ interface RunContext {
   providerId: string
   signal: GenerationAbortSignal
   backendJobId?: string
+  runtimeId?: string | null
+  /** Phase 3-J: job display label (may include the runtime id). */
+  providerLabel?: string
 }
 
 interface GenerationState {
@@ -63,11 +67,20 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
     // Phase 3-3: pass the project's derived CharacterAsset as the render layer
     // (data only - the job state machine is unchanged).
     const characterAsset = useProjectStore.getState().project.characterAsset
+    // Phase 3-C: when generating through embedded-ai-3d, forward the user's
+    // selected runtime id so the backend starts THAT runtime (never mock).
+    const selectedRuntimeId = useUIStore.getState().selectedRuntimeId
+    const runtimeId = providerId === 'embedded-ai-3d' ? selectedRuntimeId : null
+    // Phase 3-J: show the runtime id in the job label for embedded generation.
+    const providerLabel =
+      providerId === 'embedded-ai-3d' && selectedRuntimeId
+        ? `${provider.name} · ${selectedRuntimeId}`
+        : provider.name
     const request = buildGenerationRequest(spec, references, timeoutSeconds, characterAsset)
-    const context: RunContext = { request, providerId, signal: { aborted: false } }
+    const context: RunContext = { request, providerId, signal: { aborted: false }, runtimeId, providerLabel }
 
     if (!referencesWithinLimit(references)) {
-      const job = createQueuedJob(newId(), provider.name)
+      const job = createQueuedJob(newId(), providerLabel ?? provider.name)
       set((s) => ({
         jobs: {
           ...s.jobs,
@@ -85,7 +98,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
       return
     }
 
-    const job = createQueuedJob(newId(), provider.name)
+    const job = createQueuedJob(newId(), providerLabel ?? provider.name)
     set((s) => ({
       jobs: { ...s.jobs, [job.id]: job },
       contexts: { ...s.contexts, [job.id]: context },
@@ -113,7 +126,7 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
 
     // A retry is a BRAND NEW job with a new id; the old job stays for history.
     const retry = retryJobFrom(prev, newId())
-    const newContext: RunContext = { request: context.request, providerId: context.providerId, signal: { aborted: false } }
+    const newContext: RunContext = { request: context.request, providerId: context.providerId, signal: { aborted: false }, providerLabel: context.providerLabel }
     set((s) => ({
       jobs: { ...s.jobs, [retry.id]: retry },
       contexts: { ...s.contexts, [retry.id]: newContext },
@@ -165,7 +178,8 @@ async function backendFlow(
       spec: context.request.spec,
       references: context.request.references,
       timeoutSeconds: context.request.timeoutSeconds,
-      characterAsset: context.request.characterAsset
+      characterAsset: context.request.characterAsset,
+      runtimeId: context.runtimeId ?? null
     })
     context.backendJobId = created.jobId
 
@@ -205,7 +219,8 @@ async function backendFlow(
         sizeBytes: dto.result.size_bytes,
         providerId: dto.result.provider_id,
         sourceJobId: dto.result.source_job_id,
-        glbStats: dto.result.stats
+        glbStats: dto.result.stats,
+        texture: dto.result.texture ?? null
       })
       useProjectStore.getState().addModel(model, bytes)
       finish({ status: 'done', progress: 100, message: '生成完成', resultModelId: dto.result.model_id })

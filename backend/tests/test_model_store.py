@@ -68,6 +68,16 @@ class ModelStoreTest(unittest.TestCase):
         self.assertIsNone(self.store.get("nope"))
         self.assertIsNone(self.store.read_bytes("nope"))
 
+    def test_texture_metadata_round_trip(self):
+        # Phase 3-G: optional texture metadata persists through restart.
+        rec = self.store.save(b"GLB", "mock", "job1", "h", texture={"supported": True, "kind": "paint"})
+        self.assertEqual(rec.texture, {"supported": True, "kind": "paint"})
+        store2 = ModelStore(self.dir)  # restart
+        self.assertEqual(store2.get(rec.id).texture, {"supported": True, "kind": "paint"})
+        # shape-only default stays None
+        rec2 = self.store.save(b"G", "mock", "job2", "h")
+        self.assertIsNone(store2.get(rec2.id).texture)
+
     def test_tmp_file_not_exposed(self):
         (Path(self.dir) / ".tmp_zzz.glb").write_bytes(b"partial")
         self.assertIsNone(self.store.get("zzz"))

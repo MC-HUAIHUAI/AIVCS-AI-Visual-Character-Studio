@@ -65,12 +65,20 @@ OPTIONAL_HUMAN_BONES: tuple[str, ...] = (
 VRM_SUPPORTED_BODY_TYPES: tuple[str, ...] = ("humanoid", "biped-anthro", "custom")
 
 # Map our rig bone id -> VRM human bone name (for humanoid-like rigs).
+#
+# Phase 3-G: two rig conventions are supported side by side (both are
+# "our" rig ids, so `build_bone_mapping` / export stay name-based):
+#   - single-limb rigs (local-lowpower): leftArm / leftLeg ... the missing
+#     lower limbs are SYNTHESIZED at export time;
+#   - split-limb rigs (auto-rig): leftUpperArm/leftLowerArm/leftHand and
+#     leftUpperLeg/leftLowerLeg/leftFoot ... each VRM bone maps directly.
 RIG_TO_VRM: dict[str, str] = {
     "hips": "hips",
     "spine": "spine",
     "chest": "chest",
     "neck": "neck",
     "head": "head",
+    # single-limb arms/legs (synthesize lower segments at export)
     "leftArm": "leftUpperArm",
     "leftHand": "leftHand",
     "rightArm": "rightUpperArm",
@@ -79,6 +87,15 @@ RIG_TO_VRM: dict[str, str] = {
     "leftFoot": "leftFoot",
     "rightLeg": "rightUpperLeg",
     "rightFoot": "rightFoot",
+    # split-limb arms/legs (map directly)
+    "leftUpperArm": "leftUpperArm",
+    "leftLowerArm": "leftLowerArm",
+    "rightUpperArm": "rightUpperArm",
+    "rightLowerArm": "rightLowerArm",
+    "leftUpperLeg": "leftUpperLeg",
+    "leftLowerLeg": "leftLowerLeg",
+    "rightUpperLeg": "rightUpperLeg",
+    "rightLowerLeg": "rightLowerLeg",
 }
 
 # Required VRM bones that must be SYNTHESIZED (export-time only) because our rig

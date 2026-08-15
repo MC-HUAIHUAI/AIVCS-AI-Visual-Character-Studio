@@ -26,6 +26,7 @@ from .schemas.asset import GlbStats
 from .schemas.character import JobResult, JobStep, JobStatusResponse
 from .services.glb_analyzer import analyze_glb
 from .services.model_store import ModelRecord, ModelStore
+from .services.paint_output import verify_textured_glb
 
 logger = logging.getLogger("aivcs.jobs")
 
@@ -160,12 +161,17 @@ async def run_job(job: JobRecord, runner: Runner) -> None:
         except Exception as exc:  # noqa: BLE001 - safe degradation
             logger.warning("job %s: GLB analysis failed: %s", job.job_id, exc)
 
+        # Phase 3-H: texture/paint output metadata (fault tolerant - None for
+        # shape-only GLBs, backward compatible).
+        texture = verify_textured_glb(result_bytes)
+
         record = _store.save(
             result_bytes,
             provider_id=job.provider_name,
             source_job_id=job.job_id,
             spec_hash=job.spec_hash,
             stats=stats,
+            texture=texture,
         )
         job.result = JobResult(
             modelId=record.id,
@@ -175,6 +181,7 @@ async def run_job(job: JobRecord, runner: Runner) -> None:
             providerId=record.provider_id,
             sourceJobId=record.source_job_id,
             stats=GlbStats.model_validate(record.stats) if record.stats else None,
+            texture=record.texture,
         )
         job.status = "done"
         job.progress = 1.0
@@ -238,3 +245,26 @@ def get_model(model_id: str) -> bytes | None:
 
 def get_model_record(model_id: str) -> ModelRecord | None:
     return _store.get(model_id)
+
+
+def save_model_bytes(
+    data: bytes,
+    provider_id: str,
+    source_job_id: str = "",
+    spec_hash: str = "",
+    stats: dict | None = None,
+    texture: dict | None = None,
+) -> ModelRecord:
+    """Persist an arbitrary GLB/VRM payload into the shared ModelStore (Phase 3-F).
+
+    `texture` (Phase 3-G) is optional texture/paint output metadata; the model
+    is shape-only when omitted.
+    """
+    return _store.save(
+        data,
+        provider_id=provider_id,
+        source_job_id=source_job_id,
+        spec_hash=spec_hash,
+        stats=stats,
+        texture=texture,
+    )

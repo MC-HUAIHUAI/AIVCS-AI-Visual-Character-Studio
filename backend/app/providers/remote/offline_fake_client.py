@@ -45,6 +45,7 @@ class OfflineFakeVendorClient(IRemote3DClient):
         spec: CharacterSpec,
         references: list[VisionImageInput],
         cancel_event: CancellationToken | None = None,
+        runtime_id: str | None = None,
     ) -> RemoteTaskInfo:
         if self.fail_on_create:
             raise RemoteTaskError("create failed (fake vendor)")

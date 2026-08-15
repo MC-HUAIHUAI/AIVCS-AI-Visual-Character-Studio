@@ -1,0 +1,97 @@
+{
+  "id": "hunyuan3d-2mini-paint",
+  "name": "Hunyuan3D-2 mini Paint（本地 AI 纹理）",
+  "version": "0.1.0",
+  "modelVersion": "hunyuan3d-paint-v2-0-turbo 1.3B + hunyuan3d-delight-v2-0",
+  "inputTypes": ["image"],
+  "outputTypes": ["glb"],
+  "capabilities": {
+    "supportsCancel": false,
+    "supportsProgress": false,
+    "supportsResume": false,
+    "texture": {
+      "supported": true,
+      "kind": "paint",
+      "notes": "官方 Hunyuan3D-Paint-v2-0-Turbo + delight；输出带 BaseColor（及可选 Normal/MetallicRoughness）的 textured GLB。需官方 C++ 扩展（custom_rasterizer / differentiable_renderer / xatlas），Windows+Python3.14 可用性未在官方验证，安装源未提供 → 当前 unavailable/blocked，不伪装 READY"
+    }
+  },
+  "hardware": {
+    "requiresGPU": true,
+    "minimumVRAMMB": 16384,
+    "recommendedVRAMMB": 24576,
+    "minimumRAMMB": 32768,
+    "supportedOS": ["windows-x64", "windows-amd64"],
+    "supportedBackends": ["cuda"]
+  },
+  "files": {
+    "executable": "hunyuan3d-2mini-paint/api_server.py",
+    "modelPath": "hunyuan3d-2mini-paint",
+    "relativeTo": "resources/ai/3d/",
+    "license": "hunyuan3d-2mini-paint/LICENSE",
+    "notice": "hunyuan3d-2mini-paint/NOTICE"
+  },
+  "license": {
+    "id": "tencent-hunyuan-3d-2-community",
+    "url": "https://github.com/Tencent-Hunyuan/Hunyuan3D-2/blob/main/LICENSE",
+    "modelSource": "huggingface",
+    "modelSourceUrl": "https://huggingface.co/tencent/Hunyuan3D-2",
+    "noticeFile": "hunyuan3d-2mini-paint/NOTICE",
+    "territoryRestrictions": "不得在欧盟 / 英国 / 韩国使用或分发（Tencent Hunyuan 3D 2.0 Community License）",
+    "commercialThreshold": "月活跃用户超过 100 万须向腾讯申请商业许可",
+    "requiresAcceptance": true
+  },
+  "packages": [
+    {
+      "id": "hunyuan3d-2mini-paint-runtime",
+      "kind": "runtime",
+      "version": "0.1.0",
+      "source": "github",
+      "sourceUrl": "https://github.com/Tencent-Hunyuan/Hunyuan3D-2",
+      "license": "tencent-hunyuan-3d-2-community",
+      "notice": "hunyuan3d-2mini-paint/NOTICE",
+      "installDir": "hunyuan3d-2mini-paint",
+      "artifacts": [
+        {"path": "api_server.py", "url": "", "sha256": "", "sizeBytes": 0, "httpAllowed": false},
+        {"path": "LICENSE", "url": "", "sha256": "", "sizeBytes": 0, "httpAllowed": false},
+        {"path": "NOTICE", "url": "", "sha256": "", "sizeBytes": 0, "httpAllowed": false}
+      ]
+    },
+    {
+      "id": "hunyuan3d-2mini-paint-model",
+      "kind": "model",
+      "version": "hunyuan3d-paint-v2-0-turbo + hunyuan3d-delight-v2-0",
+      "source": "huggingface",
+      "sourceUrl": "https://huggingface.co/tencent/Hunyuan3D-2",
+      "license": "tencent-hunyuan-3d-2-community",
+      "notice": "hunyuan3d-2mini-paint/NOTICE",
+      "installDir": "hunyuan3d-2mini-paint",
+      "artifacts": [
+        {
+          "path": "hunyuan3d-paint-v2-0-turbo",
+          "url": "",
+          "sha256": "",
+          "sizeBytes": 0,
+          "httpAllowed": false
+        },
+        {
+          "path": "hunyuan3d-delight-v2-0",
+          "url": "",
+          "sha256": "",
+          "sizeBytes": 0,
+          "httpAllowed": false
+        }
+      ]
+    }
+  ],
+  "launch": {
+    "args": [
+      "--host", "127.0.0.1", "--port", "{port}",
+      "--model_path", "tencent/Hunyuan3D-2mini",
+      "--tex_model_path", "tencent/Hunyuan3D-2",
+      "--device", "cuda",
+      "--enable_tex"
+    ],
+    "healthPath": "/",
+    "readyTimeoutSeconds": 300.0
+  }
+}

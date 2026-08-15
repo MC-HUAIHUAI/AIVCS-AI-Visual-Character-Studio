@@ -504,6 +504,19 @@ export interface ModelAsset {
   glbStats?: GlbStats
   /** Phase 2.5-C: future normalization notes (optional; empty = never shown). */
   normalizations?: string[]
+  /** Phase 3-J: texture/paint output metadata (absent/null = shape-only). */
+  texture?: ModelTextureMeta | null
+  /** Phase 3-J: for a derived VRM, the id of the source GLB model it came from. */
+  sourceModelId?: string
+}
+
+/** Phase 3-J: texture/paint output metadata carried from ModelStore -> API -> renderer. */
+export interface ModelTextureMeta {
+  supported: boolean
+  kind: string
+  maps: { baseColor: boolean; normal: boolean; metallicRoughness: boolean }
+  textureCount: number
+  hasUVs: boolean
 }
 
 /* ------------------------------------------------------------------------ */
@@ -667,5 +680,6 @@ export const IPC_CHANNELS = {
   pickExportPath: 'model:pick-export-path',
   settingsLoad: 'settings:load',
   settingsSave: 'settings:save',
-  settingsTestConnection: 'settings:test-connection'
+  settingsTestConnection: 'settings:test-connection',
+  getDemoModel: 'demo:get-model'
 } as const

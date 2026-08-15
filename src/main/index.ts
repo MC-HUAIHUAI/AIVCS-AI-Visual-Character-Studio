@@ -2,6 +2,7 @@ import { app, BrowserWindow } from 'electron'
 import { join } from 'node:path'
 import { registerProjectHandlers } from './ipc'
 import { registerSettingsHandlers } from './settings'
+import { registerDemoHandlers } from './demo'
 import { ensureBackend, stopBackend } from './backend'
 
 function createWindow(): void {
@@ -52,6 +53,7 @@ function createWindow(): void {
 app.whenReady().then(() => {
   registerProjectHandlers()
   registerSettingsHandlers()
+  registerDemoHandlers()
   createWindow()
   // Packaged: ensure the bundled backend.exe is up (dev relies on npm run backend).
   if (app.isPackaged) {

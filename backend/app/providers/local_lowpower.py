@@ -349,6 +349,7 @@ class LocalLowPower3DProvider(AIImage3DProvider):
         on_progress: ProgressCallback,
         cancel_event: CancellationToken | None = None,
         character_asset: CharacterAsset | None = None,
+        runtime_id: str | None = None,
     ) -> bytes:
         steps = ["解析角色规格", "提取参考图配色", "生成低模拓扑", "应用材质", "导出 GLB"]
         total = len(steps)
