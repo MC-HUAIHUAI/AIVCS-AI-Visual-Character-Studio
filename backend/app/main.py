@@ -5,6 +5,8 @@ from . import config
 from .routers.generate import router as generate_router
 from .routers.vision import router as vision_router
 from .routers.config import router as config_router
+from .routers.runtime import router as runtime_router
+from .routers.local3d import router as local3d_router
 
 app = FastAPI(
     title="AIVCS Backend",
@@ -23,6 +25,8 @@ app.add_middleware(
 app.include_router(generate_router)
 app.include_router(vision_router)
 app.include_router(config_router)
+app.include_router(runtime_router)
+app.include_router(local3d_router)
 
 
 @app.on_event("startup")

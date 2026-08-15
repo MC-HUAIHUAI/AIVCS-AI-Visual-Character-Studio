@@ -6,6 +6,19 @@ import { providers } from '../core/providers/registry'
 import { editInterpreters } from '../core/providers/editInterpreter'
 import { getRigProfile, RIG_PROFILES } from '@shared/types'
 import VisionAnalysisPanel from './VisionAnalysisPanel'
+import RuntimePickerPanel from './RuntimePickerPanel'
+import {
+  acceptRuntimeLicense,
+  cancelRuntimeInstall,
+  fetchHardware,
+  fetchInstallProgress,
+  fetchRuntimes,
+  installRuntime,
+  startRuntime,
+  stopRuntime
+} from '../core/providers/httpProvider'
+import type { HardwareCapability, InstallProgress, RuntimeInfo } from '../core/runtimes/runtimeTypes'
+import { runtimeTextureStatus } from '../core/runtimes/runtimeManager'
 import type {
   AnatomyGraph,
   BodyType,
@@ -116,12 +129,20 @@ export default function AIAssistantPanel(): JSX.Element {
   const selectedReferenceIds = useUIStore((s) => s.selectedReferenceIds)
   const toggleReference = useUIStore((s) => s.toggleReference)
   const checkBackend = useUIStore((s) => s.checkBackend)
+  const selectedRuntimeId = useUIStore((s) => s.selectedRuntimeId)
+  const setSelectedRuntimeId = useUIStore((s) => s.setSelectedRuntimeId)
 
   const [error, setError] = useState<string | null>(null)
   const [editInput, setEditInput] = useState('')
   const [editResult, setEditResult] = useState<string | null>(null)
+  const [runtimes, setRuntimes] = useState<RuntimeInfo[]>([])
+  const [hardware, setHardware] = useState<HardwareCapability | null>(null)
+  const [runtimeBusy, setRuntimeBusy] = useState(false)
+  const [installProgress, setInstallProgress] = useState<InstallProgress | null>(null)
 
   const selectedProvider = useMemo(() => providers.find((p) => p.id === providerId) ?? providers[0], [providerId])
+  const isEmbedded = providerId === 'embedded-ai-3d'
+  const selectedRuntime = runtimes.find((r) => r.id === selectedRuntimeId) ?? null
   const selectedRefs = images.filter((i) => selectedReferenceIds.includes(i.id))
   const showCreature = isNonHumanType(spec.characterType)
   const rigProfile = useMemo(() => {
@@ -139,6 +160,48 @@ export default function AIAssistantPanel(): JSX.Element {
   useEffect(() => {
     void checkBackend()
   }, [providerId, checkBackend])
+
+  useEffect(() => {
+    if (!isEmbedded) {
+      setRuntimes([])
+      setHardware(null)
+      setInstallProgress(null)
+      return
+    }
+    let cancelled = false
+    const load = async (): Promise<void> => {
+      const [rs, hw] = await Promise.all([fetchRuntimes(), fetchHardware()])
+      if (cancelled) return
+      setRuntimes(rs)
+      setHardware(hw)
+    }
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [isEmbedded])
+
+  useEffect(() => {
+    if (!isEmbedded) {
+      setInstallProgress(null)
+      return
+    }
+    const active = runtimes.find(
+      (r) =>
+        r.runtimePackageState === 'downloading' ||
+        r.modelPackageState === 'downloading' ||
+        r.runtimePackageState === 'verifying' ||
+        r.modelPackageState === 'verifying'
+    )
+    if (!active) {
+      setInstallProgress(null)
+      return
+    }
+    const timer = setInterval(() => {
+      void fetchInstallProgress(active.id).then(setInstallProgress)
+    }, 600)
+    return () => clearInterval(timer)
+  }, [isEmbedded, runtimes])
 
   const setCharacterType = (t: CharacterType): void => {
     const patch: Partial<typeof spec> = { characterType: t }
@@ -180,6 +243,52 @@ export default function AIAssistantPanel(): JSX.Element {
     if (selectedProvider.requiresBackend && !backendOnline) {
       setError('后端离线。请运行 `npm run backend` 启动，或切换为 Mock 提供方。')
       return
+    }
+    if (isEmbedded) {
+      // Never fall back to mock: if no runtime is installed/compatible/ready,
+      // block generation with an explicit reason.
+      if (!selectedRuntime) {
+        setError('请先选择一个 AI 3D Runtime。')
+        return
+      }
+      if (
+        selectedRuntime.runtimePackageState === 'downloading' ||
+        selectedRuntime.modelPackageState === 'downloading' ||
+        selectedRuntime.runtimePackageState === 'verifying' ||
+        selectedRuntime.modelPackageState === 'verifying'
+      ) {
+        setError('Runtime 正在下载/校验中，请稍后再试。')
+        return
+      }
+      const selectable =
+        selectedRuntime.installState === 'installed' && selectedRuntime.compatible
+      const gpuBlocked =
+        selectedRuntime.hardwareRequirements.requiresGPU &&
+        (hardware?.gpuVendor === 'unknown' ||
+          hardware?.vramMB == null ||
+          hardware.vramMB < selectedRuntime.hardwareRequirements.minimumVRAMMB)
+      if (selectedRuntime.licenseRequiresAcceptance && !selectedRuntime.licenseAccepted) {
+        setError('尚未接受 Tencent Hunyuan 3D Community License，无法生成。')
+        return
+      }
+      if (!selectable) {
+        setError(
+          selectedRuntime.installState === 'not-installed'
+            ? 'Runtime 未安装，无法生成'
+            : selectedRuntime.installState === 'partial'
+              ? 'Runtime 部分安装，无法生成'
+              : 'Runtime 与当前硬件不兼容，无法生成'
+        )
+        return
+      }
+      if (gpuBlocked) {
+        setError('当前 GPU 不满足该 Runtime 的最低显存要求，无法生成。')
+        return
+      }
+      if (selectedRuntime.status === 'failed') {
+        setError('Runtime 启动失败，无法生成。')
+        return
+      }
     }
     if (selectedRefs.length === 0) {
       setError('未选择参考图，将使用空白参考进行生成。')
@@ -454,6 +563,59 @@ export default function AIAssistantPanel(): JSX.Element {
               </>
             )}
           </div>
+
+          {isEmbedded && (
+            <RuntimePickerPanel
+              runtimes={runtimes}
+              hardware={hardware}
+              selectedRuntimeId={selectedRuntimeId}
+              onSelect={(id) => setSelectedRuntimeId(id)}
+              onStart={async (id) => {
+                setRuntimeBusy(true)
+                const res = await startRuntime(id)
+                if (res.ok) {
+                  const rs = await fetchRuntimes()
+                  setRuntimes(rs)
+                }
+                setRuntimeBusy(false)
+                return res
+              }}
+              onStop={async (id) => {
+                setRuntimeBusy(true)
+                const res = await stopRuntime(id)
+                if (res.ok) {
+                  const rs = await fetchRuntimes()
+                  setRuntimes(rs)
+                }
+                setRuntimeBusy(false)
+                return res
+              }}
+              onInstall={async (id, kind) => {
+                setRuntimeBusy(true)
+                const res = await installRuntime(id, kind)
+                const rs = await fetchRuntimes()
+                setRuntimes(rs)
+                setRuntimeBusy(false)
+                return res
+              }}
+              onCancelInstall={async (id, kind) => {
+                const res = await cancelRuntimeInstall(id, kind)
+                if (res.cancelled) {
+                  const rs = await fetchRuntimes()
+                  setRuntimes(rs)
+                }
+                return res
+              }}
+              onAcceptLicense={async (id) => {
+                const res = await acceptRuntimeLicense(id, true)
+                const rs = await fetchRuntimes()
+                setRuntimes(rs)
+                return res
+              }}
+              progress={installProgress}
+              busy={runtimeBusy}
+            />
+          )}
         </div>
 
         {error && (
@@ -477,6 +639,20 @@ export default function AIAssistantPanel(): JSX.Element {
           >
             取消生成
           </button>
+        )}
+        {isEmbedded && selectedRuntime && (
+          <div
+            style={{
+              fontSize: 11,
+              marginTop: 8,
+              lineHeight: 1.5,
+              color: runtimeTextureStatus(selectedRuntime).available ? 'var(--text-dim)' : 'var(--warning)'
+            }}
+          >
+            当前 Runtime：{selectedRuntime.name}（{selectedRuntime.id}）
+            <br />
+            {runtimeTextureStatus(selectedRuntime).label}
+          </div>
         )}
         <div style={{ fontSize: 11, color: 'var(--text-faint)', marginTop: 8, lineHeight: 1.5 }}>
           {selectedProvider.description}

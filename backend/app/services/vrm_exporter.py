@@ -21,10 +21,9 @@ NOT implemented: SpringBone / Animation / MToon / VRM 0.x / UI.
 
 from __future__ import annotations
 
-import json
 import struct
 
-from .glb_builder import serialize_glb, validate_glb
+from .glb_builder import parse_glb, serialize_glb, validate_glb
 from .vrm_mapping import (
     OPTIONAL_HUMAN_BONES,
     REQUIRED_HUMAN_BONES,
@@ -39,20 +38,21 @@ AUTHOR = "AIVCS"
 DEFAULT_LICENSE_URL = "https://vrm.dev/licenses/1.0/"
 EXTENSION_NAME = "VRMC_vrm"
 
-_VRM_TO_RIG: dict[str, str] = {v: k for k, v in RIG_TO_VRM.items()}
+# Split-limb rig ids map to the VRM bone by the SAME name (handled by the
+# `vrm_bone in bone_to_node` branch); excluding them keeps the single-limb
+# alias map unambiguous (leftUpperLeg -> leftLeg) for our single-limb rigs.
+_SPLIT_LIMB_RIG_IDS = {
+    "leftUpperArm", "leftLowerArm", "rightUpperArm", "rightLowerArm",
+    "leftUpperLeg", "leftLowerLeg", "rightUpperLeg", "rightLowerLeg",
+}
+_VRM_TO_RIG: dict[str, str] = {v: k for k, v in RIG_TO_VRM.items() if k not in _SPLIT_LIMB_RIG_IDS}
 
 
 class VrmExportError(RuntimeError):
     """Raised when a GLB cannot be exported to VRM."""
 
 
-def _parse(data: bytes) -> tuple[dict, bytearray]:
-    validate_glb(data)
-    clen, _ctype = struct.unpack("<I4s", data[12:20])
-    gltf = json.loads(data[20 : 20 + clen])
-    bin_start = 20 + clen + 8
-    buffer = bytearray(data[bin_start:])
-    return gltf, buffer
+_parse = parse_glb  # shared GLB parser (Phase 3-K dedup)
 
 
 def _world_positions(nodes: list, parent_of: dict) -> dict[int, tuple[float, float, float]]:
@@ -145,8 +145,12 @@ def export_vrm(glb_bytes: bytes, body_type: str, model_name: str) -> bytes:
 
     human_bones: dict[str, dict] = {}
 
-    # Required bones.
+    # Required bones. Split-limb rigs map by the exact VRM bone name first;
+    # single-limb rigs map through the rig alias; otherwise synthesize.
     for vrm_bone in REQUIRED_HUMAN_BONES:
+        if vrm_bone in bone_to_node:
+            human_bones[vrm_bone] = {"node": bone_to_node[vrm_bone]}
+            continue
         rig = _VRM_TO_RIG.get(vrm_bone)
         if rig is not None and rig in bone_to_node:
             human_bones[vrm_bone] = {"node": bone_to_node[rig]}

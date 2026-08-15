@@ -41,12 +41,21 @@ function isPortOpen(port: number): Promise<boolean> {
 }
 
 function backendEnv(): NodeJS.ProcessEnv {
-  return {
+  const env: NodeJS.ProcessEnv = {
     ...process.env,
     AIVCS_DATA_DIR: join(app.getPath('userData'), 'data'),
     AIVCS_RUNTIME_TOKEN_FILE: join(app.getPath('userData'), 'data', 'runtime_config_token'),
-    AIVCS_LOCAL3D_RIG_ENABLED: 'true'
+    AIVCS_LOCAL3D_RIG_ENABLED: 'true',
+    // Phase 3-D: downloaded Runtime/Model packages land in userData/ai/3d (never app.asar).
+    AIVCS_AI3D_USERDATA_DIR: app.getPath('userData')
   }
+  if (app.isPackaged) {
+    // Phase 3-K: packaged manifests + bundled dummy runtime ship under
+    // <resources>/resources/ai/3d (extraResources); the PyInstaller temp path is
+    // never used for discovery.
+    env.AIVCS_AI3D_RESOURCES_ENV = join(process.resourcesPath, 'resources', 'ai', '3d')
+  }
+  return env
 }
 
 /**

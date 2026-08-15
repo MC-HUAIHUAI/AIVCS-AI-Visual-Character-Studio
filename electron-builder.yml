@@ -13,6 +13,10 @@ extraResources:
     to: assets/demo_character.glb
   - from: assets/demo_fox.glb
     to: assets/demo_fox.glb
+  # Phase 3-K: AI 3D Runtime manifests + bundled dummy runtime for packaged
+  # releases (backend.exe reads AIVCS_AI3D_RESOURCES_ENV pointing here).
+  - from: resources/ai/3d
+    to: resources/ai/3d
 asar: true
 win:
   target:

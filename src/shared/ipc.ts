@@ -31,4 +31,9 @@ export interface AivcsApi {
     kind: 'vision' | 'external3d',
     settings: AppSettings
   ): Promise<{ ok: boolean; error?: string }>
+  /**
+   * Reads a built-in demo GLB (human or anthro) from bundled resources.
+   * Whitelisted key only - never an arbitrary file path. No network.
+   */
+  getDemoModel(characterType: string): Promise<{ ok: boolean; bytes?: ArrayBuffer; error?: string }>
 }

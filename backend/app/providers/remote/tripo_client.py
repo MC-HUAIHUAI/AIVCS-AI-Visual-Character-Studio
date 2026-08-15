@@ -187,6 +187,7 @@ class TripoClient(IRemote3DClient):
         spec: CharacterSpec,
         references: list[VisionImageInput],
         cancel_event: CancellationToken | None = None,
+        runtime_id: str | None = None,
     ) -> RemoteTaskInfo:
         self.require_configured()
         raise NotImplementedError(

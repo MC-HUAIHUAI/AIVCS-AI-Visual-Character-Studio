@@ -190,4 +190,23 @@ check('extra. applyDtoToJob maps terminal states and metadata', () => {
   assert.equal(statusText('cancelled'), '已取消')
 })
 
+// Phase 3-J: model asset carries texture metadata + VRM source linkage
+check('modelAssetFromResult carries texture + sourceModelId', () => {
+  const texture = { supported: true, kind: 'paint', maps: { baseColor: true, normal: false, metallicRoughness: false }, textureCount: 1, hasUVs: true }
+  const asset = logic.modelAssetFromResult('m9', 'painted', {
+    format: 'glb',
+    providerId: 'hunyuan3d-2mini-paint',
+    sourceJobId: 'job9',
+    texture,
+    sourceModelId: 'src-1'
+  })
+  assert.deepEqual(asset.texture, texture)
+  assert.equal(asset.sourceModelId, 'src-1')
+  assert.equal(asset.providerId, 'hunyuan3d-2mini-paint')
+  // absent texture stays undefined (shape-only default)
+  const plain = logic.modelAssetFromResult('m10', 'shape', { format: 'glb' })
+  assert.equal(plain.texture, undefined)
+  assert.equal(plain.sourceModelId, undefined)
+})
+
 console.log(`\n${passed} checks passed`)

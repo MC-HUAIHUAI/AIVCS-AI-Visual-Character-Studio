@@ -61,6 +61,19 @@ export async function fetchBytes(url: string): Promise<ArrayBuffer> {
   return res.arrayBuffer()
 }
 
+/**
+ * Reads a bundled demo GLB through the main process (IPC). Works under both
+ * dev (http) and packaged (file://) - the renderer never fetches file:// URLs.
+ */
+export async function loadDemoModelBytes(characterType: string): Promise<ArrayBuffer> {
+  const key = isNonHuman(characterType as CharacterType) ? 'creature' : 'human'
+  const result = await window.aivcs.getDemoModel(key)
+  if (!result.ok || !result.bytes) {
+    throw new Error(result.error ?? 'demo model unavailable')
+  }
+  return result.bytes
+}
+
 export async function loadDemoCharacterBytes(id: string): Promise<ArrayBuffer> {
   const url = demoUrlForId(id)
   if (!url) throw new Error(`Unknown demo character id: ${id}`)

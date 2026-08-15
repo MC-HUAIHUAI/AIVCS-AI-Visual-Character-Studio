@@ -2,7 +2,7 @@ import type { AIImage3DProvider, GeneratedModelResult, GenerationProgress } from
 import type { GenerationAbortSignal } from './aiProvider'
 import type { BodyType, CharacterSpec, RigProfileId } from '@shared/types'
 import type { VisionImageInput } from './visionProvider'
-import { demoUrlForType, fetchBytes, isNonHuman } from '../demo/demoCharacter'
+import { loadDemoModelBytes, isNonHuman } from '../demo/demoCharacter'
 import { getRigProfile } from '@shared/types'
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
@@ -90,7 +90,7 @@ export class MockImage3DProvider implements AIImage3DProvider {
     if (signal?.aborted) throw new Error('generation aborted')
     onProgress({ step: total, totalSteps: total, percent: 1, message: '生成完成' })
 
-    const bytes = await fetchBytes(demoUrlForType(spec.characterType))
+    const bytes = await loadDemoModelBytes(spec.characterType)
 
     return {
       modelId: `model_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,

@@ -1,0 +1,38 @@
+{
+  "id": "dummy-runtime",
+  "name": "Dummy AI 3D Runtime (test)",
+  "version": "0.0.1",
+  "modelVersion": "0.0.1",
+  "inputTypes": ["image"],
+  "outputTypes": ["glb"],
+  "capabilities": {
+    "supportsCancel": true,
+    "supportsProgress": true,
+    "supportsResume": false,
+    "texture": {
+      "supported": false,
+      "kind": "none",
+      "notes": "test-only runtime, no texture/paint"
+    }
+  },
+  "hardware": {
+    "requiresGPU": false,
+    "minimumVRAMMB": 0,
+    "recommendedVRAMMB": 0,
+    "minimumRAMMB": 512,
+    "supportedOS": ["windows-x64", "windows-amd64", "linux-x86_64"],
+    "supportedBackends": ["cpu"]
+  },
+  "files": {
+    "executable": "dummy/dummy_ai3d_runtime.py",
+    "modelPath": "dummy/.no-model",
+    "relativeTo": "resources/ai/3d/"
+  },
+  "license": {
+    "id": "dummy-test-only",
+    "url": "https://example.invalid/dummy-license",
+    "modelSource": "not-a-real-model",
+    "modelSourceUrl": "https://example.invalid/dummy-model",
+    "requiresAcceptance": false
+  }
+}

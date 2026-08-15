@@ -1,0 +1,109 @@
+{
+  "id": "hunyuan3d-2mini",
+  "name": "Hunyuan3D-2 mini（本地 AI 3D）",
+  "version": "0.1.0",
+  "modelVersion": "hunyuan3d-dit-v2-mini-turbo 0.6B",
+  "inputTypes": ["image"],
+  "outputTypes": ["glb"],
+  "capabilities": {
+    "supportsCancel": false,
+    "supportsProgress": false,
+    "supportsResume": false,
+    "texture": {
+      "supported": false,
+      "kind": "future",
+      "notes": "Texture/Paint 需额外 C++ 扩展与编译环境（custom_rasterizer / differentiable_renderer / xatlas），本阶段仅 shape-only，不伪装为可用"
+    }
+  },
+  "hardware": {
+    "requiresGPU": true,
+    "minimumVRAMMB": 6144,
+    "recommendedVRAMMB": 12288,
+    "minimumRAMMB": 16384,
+    "supportedOS": ["windows-x64", "windows-amd64"],
+    "supportedBackends": ["cuda"]
+  },
+  "files": {
+    "executable": "hunyuan3d-2mini/api_server.py",
+    "modelPath": "hunyuan3d-2mini",
+    "relativeTo": "resources/ai/3d/",
+    "license": "hunyuan3d-2mini/LICENSE",
+    "notice": "hunyuan3d-2mini/NOTICE"
+  },
+  "license": {
+    "id": "tencent-hunyuan-3d-2-community",
+    "url": "https://github.com/Tencent-Hunyuan/Hunyuan3D-2/blob/main/LICENSE",
+    "modelSource": "huggingface",
+    "modelSourceUrl": "https://huggingface.co/tencent/Hunyuan3D-2mini",
+    "noticeFile": "hunyuan3d-2mini/NOTICE",
+    "territoryRestrictions": "不得在欧盟 / 英国 / 韩国使用或分发（Tencent Hunyuan 3D 2.0 Community License）",
+    "commercialThreshold": "月活跃用户超过 100 万须向腾讯申请商业许可",
+    "requiresAcceptance": true
+  },
+  "download": {
+    "kind": "model",
+    "url": "https://huggingface.co/tencent/Hunyuan3D-2mini/resolve/main/hunyuan3d-dit-v2-mini-turbo/model.fp16.safetensors",
+    "sha256": "bdbcef30dd0149a281e17d5b5b1fdad1122c904e098a42f3100e04e03c247bc4",
+    "sizeBytes": 3822584202,
+    "httpAllowed": false
+  },
+  "packages": [
+    {
+      "id": "hunyuan3d-2mini-runtime",
+      "kind": "runtime",
+      "version": "0.1.0",
+      "source": "github",
+      "sourceUrl": "https://github.com/Tencent-Hunyuan/Hunyuan3D-2",
+      "license": "tencent-hunyuan-3d-2-community",
+      "notice": "hunyuan3d-2mini/NOTICE",
+      "installDir": "hunyuan3d-2mini",
+      "artifacts": [
+        {
+          "path": "api_server.py",
+          "url": "",
+          "sha256": "",
+          "sizeBytes": 0,
+          "httpAllowed": false
+        },
+        {
+          "path": "LICENSE",
+          "url": "",
+          "sha256": "",
+          "sizeBytes": 0,
+          "httpAllowed": false
+        },
+        {
+          "path": "NOTICE",
+          "url": "",
+          "sha256": "",
+          "sizeBytes": 0,
+          "httpAllowed": false
+        }
+      ]
+    },
+    {
+      "id": "hunyuan3d-2mini-model",
+      "kind": "model",
+      "version": "hunyuan3d-dit-v2-mini-turbo 0.6B",
+      "source": "huggingface",
+      "sourceUrl": "https://huggingface.co/tencent/Hunyuan3D-2mini",
+      "license": "tencent-hunyuan-3d-2-community",
+      "notice": "hunyuan3d-2mini/NOTICE",
+      "installDir": "hunyuan3d-2mini",
+      "artifacts": [
+        {
+          "path": "model.fp16.safetensors",
+          "url": "https://huggingface.co/tencent/Hunyuan3D-2mini/resolve/main/hunyuan3d-dit-v2-mini-turbo/model.fp16.safetensors",
+          "sha256": "bdbcef30dd0149a281e17d5b5b1fdad1122c904e098a42f3100e04e03c247bc4",
+          "sizeBytes": 3822584202,
+          "httpAllowed": false
+        }
+      ]
+    }
+  ],
+  "launch": {
+    "args": ["--host", "127.0.0.1", "--port", "{port}", "--model_path", "tencent/Hunyuan3D-2mini", "--device", "cuda"],
+    "healthPath": "/",
+    "readyTimeoutSeconds": 120.0
+  }
+}

@@ -2,7 +2,25 @@
 
 面向 Windows 的 AI 虚拟主播（VTuber / 虚拟形象）制作软件。
 
-当前版本：**0.2.2（Phase 2.3 完成）**
+当前版本：**0.3.0（Local AI 3D Runtime Foundation）**
+
+## 功能状态总览
+
+| 类别 | 项目 | 状态 |
+|---|---|---|
+| Stable / Implemented | mock-local（默认 provider，无需 AI 模型即可运行） | ✅ |
+| Stable / Implemented | local-lowpower（CPU 本地确定性 3D） | ✅ |
+| Stable / Implemented | Dummy Runtime（本地 HTTP 测试 runtime，非真实 AI） | ✅ |
+| Stable / Implemented | Embedded AI 3D Runtime Manager（discovery / 安装 / 状态机 / 生命周期） | ✅ |
+| Stable / Implemented | Runtime/Model 安装器（HTTPS+checksum+size+.part 原子替换+License/Hardware 门禁） | ✅ |
+| Stable / Implemented | GLB → analyze → human/non-human 判定 → rig → VRM 1.0 pipeline | ✅ |
+| Stable / Implemented | Texture/Paint 输出 metadata 管线（ModelStore → API → Renderer） | ✅ |
+| Stable / Implemented | 硬件兼容检测（NVIDIA/AMD/Intel/unknown + DXGI） | ✅ |
+| Experimental / User-installed | Hunyuan3D-2mini Runtime（独立安装单元，需 NVIDIA CUDA + 遵守其许可证） | ⚠️ |
+| Blocked | 真实 Hunyuan Shape/Paint 推理验证（当前构建机无 NVIDIA GPU） | ⛔ |
+| Future / Unverified | Hunyuan Paint（Windows / Python 3.14 编译扩展） | 🔶 |
+| Future / Unverified | AMD/Intel GPU backend | 🔶 |
+| Future / Unverified | 真实 NVIDIA 性能数据 | 🔶 |
 
 ## 技术栈
 
@@ -73,6 +91,51 @@ AIVCS 默认无需任何 API Key 即可运行：无 API 时使用本地 Mock / L
 - 发行版**不依赖**开发者的 `.env` 文件。
 - `.env` / 环境变量（如 `AIVCS_KIMI_API_KEY`）**仅作为开发者本地 fallback**，且仅在用户未在 Settings 中配置时生效——用户填写自己的 Key 后绝不会使用开发者的 Key。
 - 无任何 API Key 时：正常启动、创建项目、使用本地/Mock 3D、使用 2D 立绘。
+
+## 本地 AI 3D Runtime（Phase 3）
+
+### 运行说明（重要）
+
+- **默认 provider 是 `mock-local`**：无需任何 AI 模型、无需后端即可运行；打开软件默认即用。
+- **AI Runtime 是独立可选组件**：安装到 `userData/ai/3d/`（打包模式）或开发目录 `resources/ai/3d/`，**不随主安装包捆绑**。
+- **真实模型权重不会进入 GitHub 源码仓库**：本仓库不含任何 Hunyuan / 其他真实模型权重。
+- **Hunyuan Runtime 需遵守其许可证**（Tencent Hunyuan Community License：禁止在欧盟 / 英国 / 韩国使用或分发；月活跃用户超过 100 万须向腾讯申请商业许可）。
+- **Hunyuan 需要 NVIDIA CUDA GPU（最低 6 GB VRAM，官方 16 GB 用于 shape+texture）**。本机（Intel 核显）检测为 incompatible，禁止 start/generate，绝不回退 Mock。
+
+### 架构
+
+```
+AIVCS Renderer (RuntimePicker / AssetsPanel / ProgressPanel)
+  → backend API（localhost:8321）
+  → Embedded AI 3D Runtime Manager（discovery / install / verify / start / stop / health）
+  → EmbeddedClient（127.0.0.1 + X-AIVCS-Token，禁止非 localhost）
+  → 本地 Runtime 进程（官方 api_server 等）
+  → GLB → validate_glb → ModelStore → Renderer
+```
+
+- **Runtime Manager**：manifest 驱动（`resources/ai/3d/manifests/*.runtime.json`），独立 Runtime/Model 包安装状态机 `NOT_INSTALLED → DOWNLOADING → VERIFYING → INSTALLED → READY/INCOMPATIBLE`（含 FAILED/PARTIAL/cancel）；下载强制 HTTPS、SHA-256+size 校验、`.part`+原子替换、host-redirect 防护、License 接受门禁、Hardware 门禁；`embedded-ai-3d` 永远 `kind=real`，绝不 fallback mock。
+- **Dummy Runtime**（`resources/ai/3d/runtimes/dummy/`）：本地 HTTP 测试 runtime，验证 create/poll/cancel/download/ModelStore 全链路；**不是真实 AI**。
+- **Hunyuan3D-2mini Runtime**（实验性 / 用户自装）：官方 `api_server.py` 协议（`/send`+`/status`），shape 权重校验码已在 manifest 记录，**真实 GPU 推理尚未在本机验证（本机无 NVIDIA）**。
+- **Hunyuan3D-2mini Paint Runtime**（`hunyuan3d-2mini-paint`）：capability 声明 `texture.supported=true`，但**安装源/Windows 编译扩展 UNVERIFIED，当前 unavailable/blocked，不伪装可用**。
+
+### GLB → VRM pipeline
+
+- `local3d_rigger`：GLB → analyze → human/non-human 分类 →（复用骨骼或确定性 auto-rig）→ skin weights / bind pose / bone mapping 校验 → VRM 1.0 导出 → 校验。
+- 人体（humanoid/biped-anthro/custom）可转换；非人体（quadruped/bird/dragon）明确拒绝。
+- 转换生成独立 VRM 模型，原始 GLB 保留；textured GLB 转 VRM 保留贴图与材质。
+- auto-rig 为**确定性程序化绑定**（shape-only），不是 AI 自动绑定。
+
+### Texture / Paint
+
+- Shape-only 模型明确显示「无纹理（shape-only）」。
+- Paint capability：unavailable / future / available 三态数据驱动，**blocked 时不伪装可用**。
+- textured GLB 正确显示 BaseColor / Normal / MetallicRoughness，metadata 在 ModelStore → API → Renderer 全链一致。
+
+### 硬件兼容
+
+- DXGI（stdlib）检测主 GPU 厂商/名称/专用显存（NVIDIA/AMD/Intel/unknown），未知显示 unknown/null，不伪造 0。
+- 仅 NVIDIA 提供 `cuda` backend；AMD/Intel 为扩展点，当前不声称支持。
+- 不满足硬件 → `INCOMPATIBLE`，禁止 start/generate，明确报原因。
 
 ## 已实现功能（Phase 1）
 
@@ -211,12 +274,14 @@ AIVCS 默认无需任何 API Key 即可运行：无 API 时使用本地 Mock / L
 - **backend 随包**：安装后应用自动启动随包的 `backend.exe`（仅监听 127.0.0.1:8321），退出时自动结束；模型与配置数据保存在用户目录（`%APPDATA%/aivcs/data`）。
 - 验证说明：`Windows clean-environment validation performed in an isolated local environment.`（当前尚未在第二台真实干净 Windows 上验证。）
 
-## 尚未实现功能（后续 Phase）
+## 尚未实现 / 未验证功能
 
-- 真实云端 Image-to-3D（`RealImage3DProviderPlaceholder` 已占位；`LocalLowPower3DProvider` 为本地 CPU 原型，非云端质量）
-- 真实骨骼生成与蒙皮绑定（RigProfile 数据已就绪）
+- **真实 Hunyuan Shape/Paint 推理验证（Phase 4，Blocked on 本机）**：当前构建机无 NVIDIA GPU，尚未在任何机器上完成真实 image→3D 的端到端验证。请不要把 Dummy/测试 GLB 成功 Rig 误认为 Hunyuan 已成功。
+- 真实云端 Image-to-3D 厂商接入（`RealImage3DProviderPlaceholder` 已占位；LocalLowPower 为本地 CPU 原型，非云端质量）
 - 真实毛发（贴图/法线/材质、Hair cards、Groom curves）
 - VRM 高级能力：SpringBone / Animation / MToon / VRM 0.x；非人类（quadruped/bird/dragon）VRM 语义
+- Hunyuan Paint（Windows / Python 3.14 编译扩展 UNVERIFIED）
+- AMD/Intel GPU backend（仅扩展点，未声称支持）
 - Live2D 导出 / 完整 Live2D 支持
 - 动画、物理、VTuber 面部/动作追踪
 

@@ -58,11 +58,14 @@ class AIImage3DProvider(ABC):
         on_progress: ProgressCallback,
         cancel_event: CancellationToken | None = None,
         character_asset: CharacterAsset | None = None,
+        runtime_id: str | None = None,
     ) -> bytes:
         """Run the pipeline and return the raw GLB bytes.
 
         `character_asset` is an optional render-layer (Phase 3-3). Providers
-        that do not consume it must simply ignore it. Implementations should
+        that do not consume it must simply ignore it. `runtime_id` is an
+        optional embedded-runtime selection (Phase 3-C) ignored by providers
+        that do not manage runtimes. Implementations should
         poll `cancel_event.is_cancelled` between steps and raise
         ProviderCancelledError when the user cancels the job.
         """

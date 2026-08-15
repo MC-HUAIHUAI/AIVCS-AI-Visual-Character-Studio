@@ -64,7 +64,10 @@ check('formatVec3', () => {
 })
 
 check('with stats -> rows populated', () => {
-  const { rows, warnings, normalizations } = buildModelInfoRows({ glbStats: stats, sizeBytes: 111857 })
+  const { rows, warnings, normalizations } = buildModelInfoRows(
+    { glbStats: stats, sizeBytes: 111857, texture: { supported: true, kind: 'paint', maps: { baseColor: true, normal: true, metallicRoughness: false }, textureCount: 1, hasUVs: true } },
+    { bodyType: 'humanoid' }
+  )
   const map = Object.fromEntries(rows.filter((r) => r.value !== null).map((r) => [r.label, r.value]))
   assert.equal(map['文件大小'], '109.2 KB')
   assert.equal(map['GLB 版本'], 'glTF 2')
@@ -72,6 +75,8 @@ check('with stats -> rows populated', () => {
   assert.equal(map['顶点数'], '2244')
   assert.equal(map['三角形数'], '3828')
   assert.equal(map['材质数'], '9')
+  assert.equal(map['纹理状态'], 'BaseColor + Normal')
+  assert.equal(map['VRM 状态'], '未绑定（可转换为 VRM）')
   assert.equal(map['法线'], '有')
   assert.equal(map['UV'], '无')
   assert.equal(map['GLB 分析尺寸（局部坐标）'], '0.94 × 1.77 × 0.77 m')
@@ -80,9 +85,13 @@ check('with stats -> rows populated', () => {
   assert.deepEqual(normalizations, [])
 })
 
-check('without stats -> null values, no warnings, no guess', () => {
+check('without stats -> stats rows null, texture/vrm defaults present', () => {
   const { rows, warnings, normalizations } = buildModelInfoRows({})
-  assert.equal(rows.every((r) => r.value === null), true)
+  const map = Object.fromEntries(rows.map((r) => [r.label, r.value]))
+  assert.equal(map['文件大小'], null)
+  assert.equal(map['顶点数'], null)
+  assert.equal(map['纹理状态'], '无纹理（shape-only）')
+  assert.equal(map['VRM 状态'], '未绑定')
   assert.deepEqual(warnings, [])
   assert.deepEqual(normalizations, [])
 })
@@ -99,7 +108,7 @@ check('model switch does not cross-talk (pure function, no shared state)', () =>
   const b = buildModelInfoRows({})
   const aRows = a.rows.filter((r) => r.value !== null)
   assert.ok(aRows.length > 0)
-  assert.ok(b.rows.every((r) => r.value === null))
+  assert.equal(b.rows.find((r) => r.label === '顶点数').value, null)
   // calling A again still yields the same data
   const a2 = buildModelInfoRows({ glbStats: stats })
   assert.deepEqual(a2.rows, a.rows)
@@ -108,8 +117,54 @@ check('model switch does not cross-talk (pure function, no shared state)', () =>
 check('empty model state', () => {
   const out = buildModelInfoRows({})
   assert.equal(out.rows.length > 0, true)
-  assert.equal(out.rows.every((r) => r.value === null), true)
+  assert.equal(out.rows.find((r) => r.label === '顶点数').value, null)
   assert.deepEqual(out.warnings, [])
+})
+
+// ---- Phase 3-J: texture / skeleton / VRM status ----
+
+check('textureStatusLabel', () => {
+  assert.equal(logic.textureStatusLabel({}), '无纹理（shape-only）')
+  assert.equal(
+    logic.textureStatusLabel({ texture: { supported: true, kind: 'paint', maps: { baseColor: true, normal: true, metallicRoughness: true } } }),
+    'BaseColor + Normal + MetallicRoughness'
+  )
+  assert.equal(
+    logic.textureStatusLabel({ texture: { supported: true, kind: 'paint', maps: { baseColor: false, normal: false, metallicRoughness: false } } }),
+    '有纹理'
+  )
+})
+
+check('canConvertToVrm', () => {
+  assert.equal(logic.canConvertToVrm('humanoid'), true)
+  assert.equal(logic.canConvertToVrm('biped-anthro'), true)
+  assert.equal(logic.canConvertToVrm('custom'), true)
+  assert.equal(logic.canConvertToVrm('quadruped'), false)
+  assert.equal(logic.canConvertToVrm('bird'), false)
+  assert.equal(logic.canConvertToVrm('dragon'), false)
+  assert.equal(logic.canConvertToVrm(null), false)
+  assert.equal(logic.canConvertToVrm(undefined), false)
+})
+
+check('vrmStatusForModel states', () => {
+  const bt = (bodyType) => ({ hasDerivedVrm: false, bodyType })
+  // VRM model -> bound
+  assert.equal(logic.vrmStatusForModel({ format: 'vrm' }, bt('humanoid')).state, 'bound')
+  // derived VRM exists -> bound
+  assert.equal(logic.vrmStatusForModel({ format: 'glb' }, { hasDerivedVrm: true, bodyType: 'humanoid' }).state, 'bound')
+  // humanoid -> bindable
+  assert.equal(logic.vrmStatusForModel({ format: 'glb' }, bt('humanoid')).state, 'bindable')
+  // non-human -> unsupported (never attempted)
+  assert.equal(logic.vrmStatusForModel({ format: 'glb' }, bt('quadruped')).state, 'unsupported')
+  // unknown body type -> neutral unbound
+  assert.equal(logic.vrmStatusForModel({ format: 'glb' }, bt(null)).state, 'unbound')
+})
+
+check('skinned skeleton row', () => {
+  const map = (s) => Object.fromEntries(buildModelInfoRows({ glbStats: s }).rows.map((r) => [r.label, r.value]))
+  assert.equal(map({ ...stats, skinned: true })['骨骼状态'], '有骨骼（skinned）')
+  assert.equal(map({ ...stats, skinned: false })['骨骼状态'], '无骨骼（静态网格）')
+  assert.equal(map(stats)['骨骼状态'], null) // skinned unknown -> no guess
 })
 
 console.log(`\n${passed} checks passed`)

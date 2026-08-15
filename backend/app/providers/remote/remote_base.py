@@ -59,6 +59,7 @@ class IRemote3DClient(ABC):
         spec: CharacterSpec,
         references: list[VisionImageInput],
         cancel_event: CancellationToken | None = None,
+        runtime_id: str | None = None,
     ) -> RemoteTaskInfo:
         raise NotImplementedError
 

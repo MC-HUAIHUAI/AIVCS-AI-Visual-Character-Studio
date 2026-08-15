@@ -26,6 +26,8 @@
     "../src/renderer/src/core/spec/generationLogic.ts",
     "../src/renderer/src/core/spec/modelInfoLogic.ts",
     "../src/renderer/src/core/spec/vrmExportLogic.ts",
+    "../src/renderer/src/core/runtimes/runtimeTypes.ts",
+    "../src/renderer/src/core/runtimes/runtimeManager.ts",
     "../src/renderer/src/core/settings/external3dSettingsLogic.ts"
   ]
 }

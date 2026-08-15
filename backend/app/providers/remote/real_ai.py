@@ -81,6 +81,7 @@ class RealAIImage3DProvider(AIImage3DProvider):
         on_progress: ProgressCallback,
         cancel_event: CancellationToken | None = None,
         character_asset=None,
+        runtime_id: str | None = None,
     ) -> bytes:
         total = len(STEPS)
         notified = False
@@ -105,7 +106,7 @@ class RealAIImage3DProvider(AIImage3DProvider):
         # 1) create task
         await check_cancel()
         try:
-            info = await self.client.create_task(spec, references, cancel_event)
+            info = await self.client.create_task(spec, references, cancel_event, runtime_id)
         except RemoteTaskError as exc:
             raise ProviderError(f"创建远程任务失败：{exc}") from exc
         on_progress(1, total, f"已创建远程任务 {info.task_id}")

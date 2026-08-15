@@ -50,7 +50,7 @@ async def generate_image_to_3d(request: GenerateRequest):
     job = create_job(
         provider.name,
         lambda on_progress, cancel_event: provider.generate(
-            request.spec, request.references, on_progress, cancel_event, request.character_asset
+            request.spec, request.references, on_progress, cancel_event, request.character_asset, request.runtime_id
         ),
         timeout_seconds=timeout,
         spec_hash=spec_hash(request.spec),
@@ -89,6 +89,7 @@ async def model_meta(model_id: str):
         specHash=record.spec_hash,
         createdAt=record.created_at,
         stats=GlbStats.model_validate(record.stats) if record.stats else None,
+        texture=record.texture,
     )
 
 

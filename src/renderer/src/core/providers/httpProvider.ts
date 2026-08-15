@@ -1,7 +1,8 @@
 import type { AIImage3DProvider, GeneratedModelResult, GenerationProgress } from './aiProvider'
 import type { GenerationAbortSignal } from './aiProvider'
-import type { CharacterAsset, CharacterSpec, ModelFormat } from '@shared/types'
+import type { CharacterAsset, CharacterSpec, GlbStats, ModelFormat } from '@shared/types'
 import type { VisionImageInput } from './visionProvider'
+import type { HardwareCapability, InstallProgress, RuntimeInfo } from '../runtimes/runtimeTypes'
 import type { GenerationRequest, JobDto } from '../spec/generationLogic'
 import { isTerminal, safeErrorMessage } from '../spec/generationLogic'
 
@@ -41,6 +42,169 @@ export async function fetchProviderStatus(): Promise<ProviderStatusInfo[]> {
   return (await res.json()) as ProviderStatusInfo[]
 }
 
+/** Reads discovered AI 3D runtimes from the backend (no key, no spawn). */
+export async function fetchRuntimes(): Promise<RuntimeInfo[]> {
+  const res = await fetch(`${AIVCS_BACKEND_URL}/api/v1/runtime`, { signal: AbortSignal.timeout(2500) })
+  if (!res.ok) return []
+  const body = (await res.json()) as { runtimes: RuntimeInfo[] }
+  return body.runtimes ?? []
+}
+
+export interface Ai3dSettings {
+  installBase: string
+  modelsDir: string
+  runtimesDir: string
+  manifestsDir: string
+  allowDownload: boolean
+  allowDownloadEnv: string
+  userDataEnv?: string | null
+  manifestsDirEnv?: string | null
+  pythonInterpreter?: string
+}
+
+/** Phase 3-I: read-only AI 3D settings for the Settings UI (no tokens/secrets). */
+export async function fetchAi3dSettings(): Promise<Ai3dSettings | null> {
+  try {
+    const res = await fetch(`${AIVCS_BACKEND_URL}/api/v1/ai3d/settings`, { signal: AbortSignal.timeout(2500) })
+    if (!res.ok) return null
+    return (await res.json()) as Ai3dSettings
+  } catch {
+    return null
+  }
+}
+
+/** Reads backend hardware capability (unknown-safe). */
+export async function fetchHardware(): Promise<HardwareCapability | null> {
+  try {
+    const res = await fetch(`${AIVCS_BACKEND_URL}/api/v1/system/hardware`, { signal: AbortSignal.timeout(2500) })
+    if (!res.ok) return null
+    return (await res.json()) as HardwareCapability
+  } catch {
+    return null
+  }
+}
+
+/** Starts a runtime process (backend-managed). */
+export async function startRuntime(runtimeId: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch(`${AIVCS_BACKEND_URL}/api/v1/runtime/${encodeURIComponent(runtimeId)}/start`, {
+      method: 'POST',
+      signal: AbortSignal.timeout(20000)
+    })
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { detail?: string }
+      return { ok: false, error: body.detail ?? `HTTP ${res.status}` }
+    }
+    return { ok: true }
+  } catch {
+    return { ok: false, error: '后端离线，无法启动 Runtime' }
+  }
+}
+
+/** Stops a runtime process (backend-managed). */
+export async function stopRuntime(runtimeId: string): Promise<{ ok: boolean }> {
+  try {
+    const res = await fetch(`${AIVCS_BACKEND_URL}/api/v1/runtime/${encodeURIComponent(runtimeId)}/stop`, {
+      method: 'POST',
+      signal: AbortSignal.timeout(10000)
+    })
+    return { ok: res.ok }
+  } catch {
+    return { ok: false }
+  }
+}
+
+/** Reads runtime process status (install + compat + process). */
+export async function fetchRuntimeStatus(runtimeId: string): Promise<{ ok: boolean; status?: string; error?: string }> {
+  try {
+    const res = await fetch(`${AIVCS_BACKEND_URL}/api/v1/runtime/${encodeURIComponent(runtimeId)}/status`, {
+      signal: AbortSignal.timeout(2500)
+    })
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` }
+    return (await res.json()) as { ok: boolean; status?: string; error?: string }
+  } catch {
+    return { ok: false, error: '后端离线' }
+  }
+}
+
+/** Phase 3-D: begin the package install state machine for one kind (background
+ * thread). Real network downloads are disabled by default; the backend returns
+ * an explicit NOT_INSTALLED result so the UI never shows a fake success. */
+export async function installRuntime(
+  runtimeId: string,
+  kind: 'runtime' | 'model' | 'all' = 'runtime'
+): Promise<{ ok: boolean; started?: boolean; error?: string }> {
+  try {
+    const res = await fetch(
+      `${AIVCS_BACKEND_URL}/api/v1/runtime/${encodeURIComponent(runtimeId)}/install?kind=${encodeURIComponent(kind)}`,
+      { method: 'POST', signal: AbortSignal.timeout(15000) }
+    )
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { detail?: string }
+      return { ok: false, error: body.detail ?? `HTTP ${res.status}` }
+    }
+    return (await res.json()) as { ok: boolean; started?: boolean; error?: string }
+  } catch {
+    return { ok: false, error: '后端离线，无法开始安装' }
+  }
+}
+
+/** Phase 3-D: request cancellation of an in-flight package download. */
+export async function cancelRuntimeInstall(
+  runtimeId: string,
+  kind: 'runtime' | 'model' = 'runtime'
+): Promise<{ ok: boolean; cancelled?: boolean }> {
+  try {
+    const res = await fetch(
+      `${AIVCS_BACKEND_URL}/api/v1/runtime/${encodeURIComponent(runtimeId)}/install/cancel?kind=${encodeURIComponent(kind)}`,
+      { method: 'POST', signal: AbortSignal.timeout(10000) }
+    )
+    if (!res.ok) return { ok: false }
+    return (await res.json()) as { ok: boolean; cancelled?: boolean }
+  } catch {
+    return { ok: false }
+  }
+}
+
+/** Phase 3-D: per-kind install progress (percent / size / speed / ETA). */
+export async function fetchInstallProgress(runtimeId: string): Promise<InstallProgress | null> {
+  try {
+    const res = await fetch(
+      `${AIVCS_BACKEND_URL}/api/v1/runtime/${encodeURIComponent(runtimeId)}/install/progress`,
+      { signal: AbortSignal.timeout(2500) }
+    )
+    if (!res.ok) return null
+    return (await res.json()) as InstallProgress
+  } catch {
+    return null
+  }
+}
+
+/** Phase 3-D: record explicit license acceptance (required before start). */
+export async function acceptRuntimeLicense(
+  runtimeId: string,
+  accepted = true
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch(
+      `${AIVCS_BACKEND_URL}/api/v1/runtime/${encodeURIComponent(runtimeId)}/license/accept`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accepted }),
+        signal: AbortSignal.timeout(10000)
+      }
+    )
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { detail?: string }
+      return { ok: false, error: body.detail ?? `HTTP ${res.status}` }
+    }
+    return (await res.json()) as { ok: boolean; error?: string }
+  } catch {
+    return { ok: false, error: '后端离线，无法保存许可证确认' }
+  }
+}
+
 export interface CreateGenerationRequest {
   backendProviderId?: string
   spec: CharacterSpec
@@ -48,6 +212,8 @@ export interface CreateGenerationRequest {
   timeoutSeconds?: number
   /** Phase 3-3: optional render-layer (derived CharacterAsset). */
   characterAsset?: CharacterAsset
+  /** Phase 3-C: optional explicit embedded runtime selection. */
+  runtimeId?: string | null
 }
 
 export async function createGenerationJob(req: CreateGenerationRequest): Promise<{ jobId: string }> {
@@ -59,7 +225,8 @@ export async function createGenerationJob(req: CreateGenerationRequest): Promise
       spec: req.spec,
       references: req.references,
       timeoutSeconds: req.timeoutSeconds ?? DEFAULT_GENERATION_TIMEOUT_SECONDS,
-      characterAsset: req.characterAsset ?? undefined
+      characterAsset: req.characterAsset ?? undefined,
+      runtimeId: req.runtimeId ?? undefined
     })
   })
   if (!res.ok) {
@@ -82,6 +249,82 @@ export async function cancelGenerationJob(jobId: string): Promise<boolean> {
   if (!res.ok) throw new Error(`取消失败（HTTP ${res.status}）`)
   const data = (await res.json()) as { cancelled: boolean }
   return data.cancelled
+}
+
+export interface RigLocal3dResult {
+  ok: boolean
+  vrmModelId?: string
+  sourceModelId?: string
+  format?: string
+  error?: string
+  classification?: { kind: string; reason: string; skinned: boolean; bodyType?: string | null }
+  skeleton?: { boneCount: number; root?: string | null }
+  boneMapping?: { requiredCovered: number; requiredTotal: number }
+  vrmMeta?: { specVersion?: string; name?: string }
+  sourceSkinned?: boolean
+  autoRigged?: boolean
+  /** Phase 3-J: analyzer stats of the rigged GLB (for the derived VRM model). */
+  stats?: GlbStats
+}
+
+/** Phase 3-F: run the Local 3D -> VRM Rigging Pipeline over a ModelStore GLB. */
+export async function rigLocal3dModel(
+  modelId: string,
+  opts: { bodyType?: string; characterType?: string; modelName?: string } = {}
+): Promise<RigLocal3dResult> {
+  try {
+    const res = await fetch(`${AIVCS_BACKEND_URL}/api/v1/local3d/rig/${encodeURIComponent(modelId)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(opts),
+      signal: AbortSignal.timeout(30000)
+    })
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { detail?: string }
+      return { ok: false, error: body.detail ?? `HTTP ${res.status}` }
+    }
+    return (await res.json()) as RigLocal3dResult
+  } catch {
+    return { ok: false, error: '后端离线，无法执行 Rig 管线' }
+  }
+}
+
+export interface ConvertToVrmResult {
+  ok: boolean
+  vrmModelId?: string
+  bytes?: ArrayBuffer
+  classification?: { kind: string; reason: string }
+  sourceSkinned?: boolean
+  autoRigged?: boolean
+  stats?: GlbStats
+  error?: string
+}
+
+/** Phase 3-J: run the Local 3D -> VRM pipeline over a GLB model and download
+ * the resulting VRM. The original GLB is never modified (a new VRM model is
+ * persisted). Non-human / unclassified models fail with a clear reason. */
+export async function convertModelToVrm(
+  modelId: string,
+  opts: { bodyType?: string; characterType?: string; modelName?: string } = {}
+): Promise<ConvertToVrmResult> {
+  const rig = await rigLocal3dModel(modelId, opts)
+  if (!rig.ok || !rig.vrmModelId) {
+    return { ok: false, error: rig.error ?? 'Rig 失败' }
+  }
+  try {
+    const { bytes } = await downloadModel(rig.vrmModelId)
+    return {
+      ok: true,
+      vrmModelId: rig.vrmModelId,
+      bytes,
+      classification: rig.classification,
+      sourceSkinned: rig.sourceSkinned,
+      autoRigged: rig.autoRigged,
+      stats: rig.stats
+    }
+  } catch {
+    return { ok: false, error: 'VRM 生成成功但下载失败' }
+  }
 }
 
 export async function downloadModel(
@@ -271,6 +514,38 @@ export class MockRemote3DProvider implements AIImage3DProvider {
     supportsTimeout: true,
     backendId: 'mock-remote',
     kind: 'mock' as const
+  }
+
+  async generate(
+    spec: CharacterSpec,
+    references: VisionImageInput[],
+    onProgress: (p: GenerationProgress) => void,
+    signal?: GenerationAbortSignal
+  ): Promise<GeneratedModelResult> {
+    return runBackendGenerate(this.capabilities.backendId, spec, references, onProgress, signal)
+  }
+}
+
+/**
+ * Embedded local AI 3D runtime provider (Phase 1: infrastructure only).
+ * Marked kind=real - NEVER a mock. When no runtime is installed/ready the
+ * backend returns an explicit unavailable error (no silent mock fallback).
+ */
+export class EmbeddedAI3DProvider implements AIImage3DProvider {
+  readonly id = 'embedded-ai-3d'
+  readonly name = 'Embedded AI 3D（本地）'
+  readonly description =
+    '本地 AI 3D Runtime（多 Runtime 管理）。阶段 1 仅基础设施，未安装 Runtime 时不可用，绝不回退 Mock。'
+  readonly requiresBackend = true
+  readonly capabilities = {
+    mode: 'local' as const,
+    gpuRequired: true,
+    maxReferences: 4,
+    outputFormat: 'glb' as const,
+    supportsCancel: true,
+    supportsTimeout: true,
+    backendId: 'embedded-ai-3d',
+    kind: 'real' as const
   }
 
   async generate(

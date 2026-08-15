@@ -44,3 +44,17 @@ electron-builder-output/
 # Frontend review logic test build output
 .review-test/
 .cache/
+
+# Phase 3-B Hunyuan3D POC (isolated; not part of AIVCS)
+poc/
+
+# Phase 3-L: real model weights are NEVER committed (targeted by extension;
+# keeps manifests / dummy .no-model marker / fixtures intact).
+*.safetensors
+*.ckpt
+*.pth
+*.onnx
+*.gguf
+
+# Phase 3-L: download temp files (atomic-install artifacts)
+*.part
